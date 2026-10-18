@@ -4,30 +4,37 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#173d64">
-  <title>Carte d’identité Odynéo</title>
+  <title>Carte d’identité des établissements</title>
   <link rel="stylesheet" href="./style.css">
   <script>
-    // Charge l’API depuis l’instance Grist qui ouvre ce widget.
-    // En aperçu hors de Grist, utilise l’instance publique Grist.
+    // Dans Grist, charge l’API de l’instance qui héberge le document.
     (function () {
-      let gristOrigin = 'https://docs.getgrist.com';
-      try {
-        if (document.referrer) gristOrigin = new URL(document.referrer).origin;
-      } catch (_) {}
-      document.write('<script src="' + gristOrigin + '/grist-plugin-api.js"><\/script>');
+      let origin = 'https://docs.getgrist.com';
+      try { if (document.referrer) origin = new URL(document.referrer).origin; } catch (_) {}
+      document.write('<script src="' + origin + '/grist-plugin-api.js"><\/script>');
     })();
   </script>
 </head>
 <body>
-<main class="app">
-  <header class="header"><div id="brand" class="brand">O</div><div><h1>Carte d’identité des établissements</h1><p>Les informations communes se saisissent une fois. Les unités et les lieux se rattachent ensuite à l’établissement.</p></div><div id="connection" class="connection">Connexion à Grist…</div></header>
-  <nav id="tabs" class="tabs" aria-label="Rubriques"></nav>
-  <div id="error" class="error hidden"></div>
-  <section class="layout">
-    <aside id="list-panel" class="panel"><div class="panel-head"><h2 id="list-title">Établissements</h2><button id="new" class="btn btn-main spacer">＋ Ajouter</button></div><div class="panel-body"><input id="search" class="search" placeholder="Rechercher par nom…"><div id="list" class="list"></div></div></aside>
-    <section id="content" class="panel"><div id="view"></div></section>
-  </section>
-</main>
+  <main class="app">
+    <header class="topbar">
+      <div id="brand" class="brand" aria-hidden="true">O</div>
+      <div class="heading"><h1>Carte d’identité des établissements</h1><p>Les informations se saisissent une fois, puis les lieux et les unités se rattachent à l’établissement.</p></div>
+      <button id="edit-charter" class="button charter-button">Charte commune</button>
+      <div id="connection" class="connection">Connexion à Grist…</div>
+    </header>
+    <div id="message" class="message hidden" role="status" aria-live="polite"></div>
+    <div class="workspace">
+      <aside class="sidebar">
+        <div class="side-heading"><div><h2>Établissements</h2><small><span id="list-count">0</span> fiche(s)</small></div><button id="new-establishment" class="button primary small">＋ Créer une fiche</button></div>
+        <label class="search-label" for="search">Rechercher un établissement</label>
+        <input id="search" class="search" type="search" placeholder="Saisis un nom…">
+        <div id="establishment-list" class="establishment-list"><div class="empty-list">Chargement…</div></div>
+      </aside>
+      <section id="main-panel" class="main-panel" aria-live="polite"><div class="welcome"><h2>Connexion à Grist…</h2></div></section>
+    </div>
+  </main>
+  <dialog id="edit-dialog" class="edit-dialog"></dialog>
   <script src="./script.js" defer></script>
 </body>
 </html>

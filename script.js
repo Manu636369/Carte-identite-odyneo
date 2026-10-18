@@ -1,94 +1,621 @@
 (() => {
   'use strict';
-  const T={Association:'Association',Poles:'Poles',Etablissements:'Etablissements',Implantations:'Implantations',Unites:'Unites'};
-  const LABELS={Association:'Charte commune',Poles:'P\u00f4les',Etablissements:'\u00c9tablissements',Implantations:'Lieux',Unites:'Unit\u00e9s'};
-  const TYPES=['Foyer de vie (FV)','Foyer d\u2019h\u00e9bergement (FH)','\u00c9tablissement d\u2019accueil m\u00e9dicalis\u00e9 (EAM, ex-FAM)','Maison d\u2019accueil sp\u00e9cialis\u00e9e (MAS)','Service d\u2019accueil de jour (SAJ)','SAJ m\u00e9dicalis\u00e9 (SAJM)','Autre / \u00e0 pr\u00e9ciser'];
-  const MODES=['Accueil permanent','Accueil temporaire','Accueil de r\u00e9pit','Accueil de jour','Internat de semaine','Internat s\u00e9quentiel','Semi-internat','H\u00e9bergement externalis\u00e9','Logement ou stage','Habitat group\u00e9','Accompagnement \u00e0 domicile','Vacances / r\u00e9pit','Intervention multisite','Autre / \u00e0 pr\u00e9ciser'];
-  const STATUTS=['\u00c0 confirmer','En activit\u00e9','Suspendu','Ferm\u00e9'];
-  const F={
-    Association:{title:'Nom de l\u2019association',photo:'Logo de l\u2019association',subtitle:['R\u00e9f\u00e9rence de la charte'],groups:[['Charte commune',[['Nom de l\u2019association','text',true],['Logo de l\u2019association','image'],['Couleur principale (HEX)','text'],['Couleur secondaire (HEX)','text'],['Couleur d\u2019accent (HEX)','text'],['Police (facultative)','text']]],['R\u00e9f\u00e9rences',[['R\u00e9f\u00e9rence de la charte','text'],['Date de v\u00e9rification','date'],['Notes','textarea']]]]},
-    Poles:{title:'Nom du p\u00f4le',subtitle:['\u00c9tablissement de rattachement administratif'],groups:[['Informations du p\u00f4le',[['Nom du p\u00f4le','text',true],['\u00c9tablissement de rattachement administratif','ref','Etablissements'],['Statut','choice',STATUTS]]],['Suivi facultatif',[['Source de v\u00e9rification','text'],['Date de v\u00e9rification','date'],['Notes','textarea']]]]},
-    Etablissements:{title:'Nom de l\u2019\u00e9tablissement',photo:'Photo de l\u2019\u00e9tablissement',subtitle:['P\u00f4le de rattachement (facultatif)'],groups:[['L\u2019\u00e9tablissement',[['Nom de l\u2019\u00e9tablissement','text',true],['P\u00f4le de rattachement (facultatif)','ref','Poles'],['Photo de l\u2019\u00e9tablissement','image'],['Adresse e-mail administrative','email'],['T\u00e9l\u00e9phone administratif','tel']]],['Lieux associ\u00e9s',[['Implantations / lieux (plusieurs possibles)','reflist','Implantations']]],['Pr\u00e9sentation personnalis\u00e9e (facultatif)',[['Couleur principale locale (facultative)','text'],['Couleur secondaire locale (facultative)','text'],['Couleur d\u2019accent locale (facultative)','text']]],['Suivi facultatif',[['Statut','choice',STATUTS],['Source de v\u00e9rification','text'],['Date de v\u00e9rification','date'],['Notes','textarea']]]]},
-    Implantations:{title:'Nom du lieu / site',subtitle:['Commune'],groups:[['Le lieu',[['Nom du lieu / site','text',true],['Type de lieu','choice',['Site principal','Antenne','B\u00e2timent','Logement / appartement','Zone d\u2019intervention','Autre / \u00e0 pr\u00e9ciser']],['Adresse','text'],['Compl\u00e9ment d\u2019adresse','text'],['Code postal','text'],['Commune','text'],['D\u00e9partement','text'],['Pays','text']]],['Informations pratiques',[['Pr\u00e9cisions d\u2019acc\u00e8s ou de localisation','textarea']]],['Suivi facultatif',[['Statut','choice',STATUTS],['Source de v\u00e9rification','text'],['Date de v\u00e9rification','date'],['Notes','textarea']]]]},
-    Unites:{title:'Nom de l\u2019unit\u00e9 / du service',photo:'Photo ou logo de l\u2019unit\u00e9',subtitle:['Type(s) de service'],groups:[['L\u2019unit\u00e9',[['Nom de l\u2019unit\u00e9 / du service','text',true],['\u00c9tablissement de rattachement','ref','Etablissements'],['Implantation / lieu','ref','Implantations'],['Type(s) de service','multi',TYPES],['Modalit\u00e9s d\u2019accueil','multi',MODES]]],['Pour situer l\u2019unit\u00e9',[['B\u00e2timent','text'],['\u00c9tage(s)','text'],['Photo ou logo de l\u2019unit\u00e9','image']]],['Orientations concern\u00e9es (foyers uniquement)',[['Orientations / notifications (foyers uniquement)','textarea']]],['Pr\u00e9sentation personnalis\u00e9e (facultatif)',[['Couleur principale locale (facultative)','text'],['Couleur secondaire locale (facultative)','text'],['Couleur d\u2019accent locale (facultative)','text']]],['Suivi facultatif',[['Statut','choice',STATUTS],['Source de v\u00e9rification','text'],['Date de v\u00e9rification','date'],['Notes','textarea']]]]},
+
+  // Widget Grist : créer une fiche guidée, enregistrer les lieux puis les unités.
+  const TABLES = ['Association', 'Poles', 'Etablissements', 'Implantations', 'Unites'];
+  const TITLES = {
+    Association: 'Nom de l’association', Poles: 'Nom du pôle',
+    Etablissements: 'Nom de l’établissement', Implantations: 'Nom du lieu / site',
+    Unites: 'Nom de l’unité / du service'
   };
-  const $=id=>document.getElementById(id), state={table:'Etablissements',rows:{},keys:{},columnMap:{},selected:null,mode:'view',busy:false};
-  const norm=s=>String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]/g,'');
-  const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-  function col(table,label){const wanted=norm(label);return state.columnMap[table]?.[wanted]||state.keys[table]?.find(k=>norm(k)===wanted)||null}
-  function get(table,row,label){const k=col(table,label);return k?decode(row?.[k]):undefined}
-  function set(table,label,value,out){const k=col(table,label);if(!k)throw new Error(`Je ne trouve pas la colonne \u00ab ${label} \u00bb dans la table ${table}. V\u00e9rifie les en-t\u00eates import\u00e9s.`);out[k]=value}
-  function decode(v){if(!Array.isArray(v))return v;switch(v[0]){case'R':return v.length>=3?v[2]:v[1];case'r':return Array.isArray(v[2])?v[2]:(v.length===2&&Array.isArray(v[1])?v[1]:v.slice(2));case'L':return v.slice(1).flatMap(x=>Array.isArray(x)?x:[x]);case'd':case'D':return v[1]??null;case'E':return '';default:return v}}
-  function rows(table=state.table){return state.rows[table]||[]}
-  function byId(table,id){return rows(table).find(r=>r.id===Number(id))}
-  function title(table,row){return String(get(table,row,F[table].title)||'(fiche sans nom)')}
-  function idList(v){const a=decode(v);return Array.isArray(a)?a.map(Number).filter(Boolean):[]}
-  function relName(table,id){const r=byId(table,id);return r?title(table,r):''}
-  function valueText(table,row,label){let v=get(table,row,label);if(v===null||v===undefined||v==='')return '\u2014';const key=col(table,label);const raw=row?.[key];if(Array.isArray(raw)&&raw[0]==='R'){const target=raw[1]===table?raw[1]:(raw.length>=3?raw[1]:null);const refTable=label==='P\u00f4le de rattachement (facultatif)'?'Poles':label==='\u00c9tablissement de rattachement administratif'?'Etablissements':label==='\u00c9tablissement de rattachement'?'Etablissements':label==='Implantation / lieu'?'Implantations':null;return refTable?relName(refTable,decode(raw))||'\u2014':String(decode(raw))}if(label==='P\u00f4le de rattachement (facultatif)')return relName('Poles',v)||'\u2014';if(label==='\u00c9tablissement de rattachement administratif'||label==='\u00c9tablissement de rattachement')return relName('Etablissements',v)||'\u2014';if(label==='Implantation / lieu')return relName('Implantations',v)||'\u2014';if(label==='Implantations / lieux (plusieurs possibles)')return idList(v).map(id=>relName('Implantations',id)).filter(Boolean).join(', ')||'\u2014';if(Array.isArray(v))return v.join(', ')||'\u2014';if(typeof v==='number'&&v>1000000000&&v<3000000000)return new Date(v*1000).toLocaleDateString('fr-FR');if(v===true)return'Oui';if(v===false)return'Non';return String(v)}
-  function attachmentIds(v){const d=decode(v);if(!Array.isArray(d))return d?[d]:[];return d.flat(Infinity).filter(x=>typeof x==='number'||/^\d+$/.test(String(x))).map(Number)}
-  async function photoUrl(table,row,label){const ids=attachmentIds(get(table,row,label));if(!ids.length)return null;try{const t=await grist.docApi.getAccessToken({readOnly:true});return `${t.baseUrl}/attachments/${ids[0]}/download?auth=${encodeURIComponent(t.token)}`}catch(e){return null}}
-  async function loadColumnMap(){
-    // Grist s\u00e9pare le nom visible d'une colonne (label) de son identifiant technique (colId).
-    // On lit les m\u00e9tadonn\u00e9es du document pour faire le lien entre les deux.
-    try{
-      const [tablesMeta,columnsMeta]=await Promise.all([
-        grist.docApi.fetchTable('_grist_Tables'),
-        grist.docApi.fetchTable('_grist_Tables_column')
-      ]);
-      const tableRefs={};
-      (tablesMeta.tableId||[]).forEach((name,i)=>{tableRefs[name]=Number(tablesMeta.id?.[i])});
-      for(const table of Object.keys(T)){
-        const ref=tableRefs[table], map={};
-        if(!ref)continue;
-        (columnsMeta.colId||[]).forEach((colId,i)=>{
-          if(Number(decode(columnsMeta.parentId?.[i]))===ref){
-            const label=columnsMeta.label?.[i];
-            if(label)map[norm(label)]=colId;
-          }
-        });
-        state.columnMap[table]=map;
-      }
-    }catch(e){
-      // Les identifiants d\u00e9riv\u00e9s des en-t\u00eates restent utilisables en solution de secours.
-      console.warn('M\u00e9tadonn\u00e9es Grist indisponibles, utilisation des identifiants de colonnes.',e);
+  const LABELS = {
+    Association: 'Charte commune', Poles: 'Pôles', Etablissements: 'Établissements',
+    Implantations: 'Lieux', Unites: 'Unités'
+  };
+  const SERVICE_TYPES = [
+    'Foyer de vie (FV)', 'Foyer d’hébergement (FH)',
+    'Établissement d’accueil médicalisé (EAM, ex-FAM)',
+    'Maison d’accueil spécialisée (MAS)', 'Service d’accueil de jour (SAJ)',
+    'SAJ médicalisé (SAJM)', 'Autre / à préciser'
+  ];
+  const WELCOME_MODES = [
+    'Accueil permanent', 'Accueil temporaire', 'Accueil de répit', 'Accueil de jour',
+    'Internat de semaine', 'Internat séquentiel', 'Semi-internat',
+    'Hébergement externalisé', 'Logement ou stage', 'Habitat groupé',
+    'Accompagnement à domicile', 'Vacances / répit', 'Intervention multisite',
+    'Autre / à préciser'
+  ];
+  const PLACE_TYPES = ['Site principal', 'Antenne', 'Bâtiment', 'Logement / appartement', 'Autre / à préciser'];
+
+  const $ = id => document.getElementById(id);
+  const state = {
+    data: {}, columns: {}, selected: null, search: '', busy: false,
+    wizard: {active: false, step: 1, establishmentId: null, locations: [], units: []},
+    editor: null
+  };
+  const norm = value => String(value ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+  function unwrap(value) {
+    if (!Array.isArray(value)) return value;
+    const code = value[0];
+    if (code === 'R') return Number(value.length >= 3 ? value[2] : value[1]) || null;
+    if (code === 'r') {
+      const raw = value.length >= 3 ? value[2] : value[1];
+      return Array.isArray(raw) ? raw.map(Number).filter(Number.isFinite) : [];
+    }
+    if (code === 'L') return value.slice(1).flatMap(v => Array.isArray(v) ? v : [v]);
+    if (code === 'd' || code === 'D') return value[1] ?? null;
+    if (code === 'E') return '';
+    return value;
+  }
+  function colId(table, label) {
+    return state.columns[table]?.[norm(label)] || null;
+  }
+  function val(table, row, label) {
+    const key = colId(table, label);
+    return key && row ? unwrap(row[key]) : null;
+  }
+  function rows(table) { return state.data[table] || []; }
+  function byId(table, id) { return rows(table).find(r => Number(r.id) === Number(id)); }
+  function displayName(table, row) { return String(val(table, row, TITLES[table]) || 'Fiche sans nom'); }
+  function relationName(table, id) {
+    const row = id ? byId(table, id) : null;
+    return row ? displayName(table, row) : '';
+  }
+  function selectedEstablishment() { return byId('Etablissements', state.selected); }
+
+  function setMessage(message, kind = 'info') {
+    const box = $('message');
+    box.textContent = message || '';
+    box.className = message ? `message ${kind}` : 'message hidden';
+  }
+  function setConnection(text, ok = true) {
+    $('connection').textContent = text;
+    $('connection').classList.toggle('offline', !ok);
+  }
+
+  async function loadColumnNames() {
+    state.columns = {};
+    const [tablesMeta, columnsMeta] = await Promise.all([
+      grist.docApi.fetchTable('_grist_Tables'),
+      grist.docApi.fetchTable('_grist_Tables_column')
+    ]);
+    const tableRef = {};
+    (tablesMeta.tableId || []).forEach((name, i) => { tableRef[name] = Number(tablesMeta.id?.[i]); });
+    for (const table of TABLES) {
+      const ref = tableRef[table];
+      if (!ref) continue;
+      const map = {};
+      (columnsMeta.colId || []).forEach((id, i) => {
+        const parent = unwrap(columnsMeta.parentId?.[i]);
+        const label = columnsMeta.label?.[i];
+        if (Number(parent) === ref && label) map[norm(label)] = id;
+      });
+      state.columns[table] = map;
     }
   }
-  async function load(){say('Lecture des tables\u2026');try{for(const table of Object.keys(T)){const raw=await grist.docApi.fetchTable(table);state.keys[table]=Object.keys(raw).filter(k=>k!=='id');const ids=raw.id||[];state.rows[table]=ids.map((id,i)=>{const o={id};for(const k of state.keys[table])o[k]=raw[k]?.[i];return o})}await loadColumnMap();say('Connect\u00e9 \u00e0 Grist');applyTheme();render()}catch(e){say('Connexion \u00e0 v\u00e9rifier');error(`Je n\u2019arrive pas \u00e0 lire les cinq tables. V\u00e9rifie qu\u2019elles s\u2019appellent exactement Association, Poles, Etablissements, Implantations et Unites, puis recharge le widget.\n\nD\u00e9tail : ${e?.message||e}`)}}
-  function say(s){$('connection').textContent=s}
-  function error(s){$('error').textContent=s;$('error').classList.remove('hidden')}
-  function clearError(){$('error').textContent='';$('error').classList.add('hidden')}
-  function applyTheme(){const assoc=rows('Association')[0];const clean=(v,fb)=>/^#[0-9a-f]{6}$/i.test(String(v||''))?v:fb;const current=byId(state.table,state.selected);let blue=clean(get('Association',assoc,'Couleur principale (HEX)'),'#173d64'),orange=clean(get('Association',assoc,'Couleur secondaire (HEX)'),'#de8436'),green=clean(get('Association',assoc,'Couleur d\u2019accent (HEX)'),'#a9c442');if(state.table==='Etablissements'&&current){blue=clean(get(state.table,current,'Couleur principale locale (facultative)'),blue);orange=clean(get(state.table,current,'Couleur secondaire locale (facultative)'),orange);green=clean(get(state.table,current,'Couleur d\u2019accent locale (facultative)'),green)}if(state.table==='Unites'&&current){blue=clean(get(state.table,current,'Couleur principale locale (facultative)'),blue);orange=clean(get(state.table,current,'Couleur secondaire locale (facultative)'),orange);green=clean(get(state.table,current,'Couleur d\u2019accent locale (facultative)'),green)}document.documentElement.style.setProperty('--blue',blue);document.documentElement.style.setProperty('--orange',orange);document.documentElement.style.setProperty('--green',green);const brand=$('brand'),logo=rows('Association')[0];photoUrl('Association',logo,'Logo de l\u2019association').then(url=>{brand.innerHTML=url?`<img src="${esc(url)}" alt="Logo de l\u2019association">`:'O'})}
-  function renderTabs(){const nav=$('tabs');nav.innerHTML='';for(const table of Object.keys(T)){const b=document.createElement('button');b.className='tab'+(state.table===table?' active':'');b.textContent=LABELS[table];b.onclick=()=>{state.table=table;state.selected=null;state.mode='view';$('search').value='';clearError();render()};nav.append(b)}}
-  function listSubtitle(table,row){if(table==='Etablissements'){const pole=get(table,row,'P\u00f4le de rattachement (facultatif)');const loc=idList(get(table,row,'Implantations / lieux (plusieurs possibles)')).map(id=>relName('Implantations',id)).filter(Boolean);return [relName('Poles',pole),...loc].filter(Boolean).join(' \u00b7 ')||'\u00c9tablissement'}if(table==='Unites')return [valueText(table,row,'Type(s) de service'),valueText(table,row,'\u00c9tage(s)')].filter(x=>x!=='\u2014').join(' \u00b7 ');if(table==='Implantations')return [get(table,row,'Commune'),get(table,row,'Code postal')].filter(Boolean).join(' \u00b7 ');if(table==='Poles')return 'P\u00f4le associatif';return 'Charte de l\u2019association'}
-  async function renderList(){const table=state.table;const list=$('list'),q=$('search').value.trim().toLocaleLowerCase('fr');$('list-title').textContent=LABELS[table]+` (${rows(table).length})`;$('new').classList.toggle('hidden',table==='Association'&&rows('Association').length>0);const filtered=rows(table).filter(r=>!q||`${title(table,r)} ${listSubtitle(table,r)}`.toLocaleLowerCase('fr').includes(q));if(!filtered.length){list.innerHTML=`<div class="empty">Aucune fiche pour le moment.<br>${table==='Association'?'Ajoute la charte commune.':'Clique sur \u00ab Ajouter \u00bb pour commencer.'}</div>`;return}let html='';for(const r of filtered){const img=F[table].photo?await photoUrl(table,r,F[table].photo):null;html+=`<button class="record ${r.id===state.selected?'selected':''}" data-id="${r.id}">${img?`<img class="record-thumb" src="${esc(img)}">`:`<span class="record-thumb">${table==='Unites'?'\u2302':table==='Implantations'?'\u2316':table==='Poles'?'\u25ce':'O'}</span>`}<span class="record-text"><strong>${esc(title(table,r))}</strong><small>${esc(listSubtitle(table,r))}</small></span></button>`}list.innerHTML=html;list.querySelectorAll('.record').forEach(b=>b.onclick=()=>{state.selected=Number(b.dataset.id);state.mode='view';clearError();render()})}
-  function detail(label,text){return `<div class="detail"><label>${esc(label)}</label><div>${esc(text||'\u2014')}</div></div>`}
-  async function renderCard(){const host=$('view'),table=state.table,row=byId(table,state.selected);if(state.mode==='edit'||state.mode==='new'){await renderForm();return}if(!row){if(table==='Association'&&rows('Association').length===0){host.innerHTML='<div class="empty">Commence par saisir une fois la charte graphique commune.</div>'}else{host.innerHTML='<div class="empty">S\u00e9lectionne une fiche \u00e0 gauche pour consulter sa carte d\u2019identit\u00e9.</div>'}return}const img=F[table].photo?await photoUrl(table,row,F[table].photo):null;const titleText=title(table,row);let sub='';for(const s of F[table].subtitle||[])sub+=(sub?' \u00b7 ':'')+valueText(table,row,s);let photo=img?`<img class="hero-image" src="${esc(img)}" alt="">`:'';let avatar=img?`<img class="hero-logo" src="${esc(img)}" alt="Photo">`:`<div class="hero-logo hero-placeholder">\uff0b</div>`;let html=`<div class="hero">${photo}<div class="hero-shade"></div><div class="hero-content">${avatar}<div><h2>${esc(titleText)}</h2><p>${esc(sub||LABELS[table])}</p></div><div class="card-actions"><button id="edit" class="btn btn-main">Modifier</button><button id="delete" class="btn btn-danger">Supprimer</button></div></div></div><div class="card-content">`;
-    for(const [group,fields] of F[table].groups){if(group==='Suivi facultatif')continue;html+=`<h3 class="section-title">${esc(group)}</h3><div class="details">`;for(const [label] of fields){if(label===F[table].photo)continue;html+=detail(label,valueText(table,row,label))}html+='</div>'}
-    if(table==='Etablissements'){const related=rows('Unites').filter(u=>Number(get('Unites',u,'\u00c9tablissement de rattachement'))===row.id);html+='<h3 class="section-title">Unit\u00e9s rattach\u00e9es</h3>';if(related.length){html+='<div class="unit-list">';for(const u of related){const photo=await photoUrl('Unites',u,'Photo ou logo de l\u2019unit\u00e9');const loc=relName('Implantations',get('Unites',u,'Implantation / lieu'));html+=`<div class="unit-card">${photo?`<img class="unit-photo" src="${esc(photo)}">`:'<span class="unit-photo">\u2302</span>'}<div><strong>${esc(title('Unites',u))}</strong><small>${esc([valueText('Unites',u,'Type(s) de service'),loc,valueText('Unites',u,'\u00c9tage(s)')].filter(x=>x&&x!=='\u2014').join(' \u00b7 '))}</small></div></div>`}html+='</div>'}else html+='<div class="notice">Aucune unit\u00e9 n\u2019est encore rattach\u00e9e \u00e0 cet \u00e9tablissement. Pour en ajouter une, ouvre l\u2019onglet \u00ab Unit\u00e9s \u00bb.</div>';html+='<div style="margin-top:12px"><button id="add-unit" class="btn btn-soft">\uff0b Ajouter une unit\u00e9 \u00e0 cet \u00e9tablissement</button></div>'}
-    if(table==='Poles'){const members=rows('Etablissements').filter(e=>Number(get('Etablissements',e,'P\u00f4le de rattachement (facultatif)'))===row.id);html+='<h3 class="section-title" style="margin-top:18px">\u00c9tablissements rattach\u00e9s au p\u00f4le</h3><div class="details">'+(members.length?members.map(e=>detail('\u00c9tablissement',title('Etablissements',e))).join(''):'<div class="notice">Aucun \u00e9tablissement n\u2019est encore li\u00e9 \u00e0 ce p\u00f4le.</div>')+'</div>'}
-    html+='</div>';host.innerHTML=html;$('edit').onclick=()=>{state.mode='edit';render()};$('delete').onclick=remove;if($('add-unit'))$('add-unit').onclick=()=>{state.table='Unites';state.selected=null;state.mode='new';state.prefillEstablishment=row.id;render()}}
-  function options(table){return rows(table).map(r=>({id:r.id,name:title(table,r)}))}
-  function readSelected(field,row){const type=field[1],label=field[0],v=get(state.table,row,label);if(type==='ref')return String(Number(v)||0);if(type==='reflist')return idList(v).map(String);if(type==='multi')return Array.isArray(v)?v.map(String):[];return v??''}
-  function inputFor(field,row){const [label,type,arg,required]=field;const key=norm(label),id='field_'+key;const val=readSelected(field,row);let html='';if(type==='ref'){const opts=options(arg);html=`<select id="${id}" ${required?'required':''}><option value="">Choisir\u2026</option>${opts.map(o=>`<option value="${o.id}" ${val===String(o.id)?'selected':''}>${esc(o.name)}</option>`).join('')}</select>`}
-    else if(type==='reflist'){const opts=options(arg),picked=new Set(val);html=`<div class="checks">${opts.length?opts.map(o=>`<label class="check"><input type="checkbox" name="${id}" value="${o.id}" ${picked.has(String(o.id))?'checked':''}> ${esc(o.name)}</label>`).join(''):'<span class="hint">Aucun lieu cr\u00e9\u00e9. Ajoute d\u2019abord un lieu dans l\u2019onglet \u00ab Lieux \u00bb.</span>'}</div>`}
-    else if(type==='multi'){const picked=new Set(Array.isArray(val)?val.map(String):[]);html=`<div class="checks">${arg.map(o=>`<label class="check"><input type="checkbox" name="${id}" value="${esc(o)}" ${picked.has(o)?'checked':''}> ${esc(o)}</label>`).join('')}</div>`}
-    else if(type==='choice'){html=`<select id="${id}" ${required?'required':''}><option value="">Choisir\u2026</option>${arg.map(o=>`<option ${String(val)===o?'selected':''}>${esc(o)}</option>`).join('')}</select>`}
-    else if(type==='image'){const existing=F[state.table].photo===label&&row.id?photoUrl(state.table,row,label):Promise.resolve(null);html=`<div class="photo-input"><input id="${id}" type="file" accept="image/*"><div class="hint">Choisis une photo sur ton ordinateur. JPG ou PNG conseill\u00e9.</div><img id="preview_${id}" class="photo-preview ${val?'':'hidden'}" alt="Aper\u00e7u"></div>`;existing.then(url=>{const p=$('preview_'+id);if(p&&url){p.src=url;p.classList.remove('hidden')}})}
-    else if(type==='textarea')html=`<textarea id="${id}" placeholder="Saisir ici\u2026">${esc(Array.isArray(val)?val.join('\n'):val)}</textarea>`;
-    else {const htmlType=type==='date'?'date':type==='email'?'email':type==='tel'?'tel':'text';let shown=val;if(type==='date'&&typeof val==='number')shown=new Date(val*1000).toISOString().slice(0,10);html=`<input id="${id}" type="${htmlType}" value="${esc(shown)}" ${required?'required':''} ${type==='text'&&label.startsWith('Couleur')?'placeholder="#173D64"':''}>`}
-    const help=(label==='P\u00f4le de rattachement (facultatif)')?'Laisse vide si l\u2019\u00e9tablissement ne d\u00e9pend d\u2019aucun p\u00f4le.':label.includes('notifications')?'S\u00e9pare les diff\u00e9rentes notifications par une virgule.':label==='Implantations / lieux (plusieurs possibles)'?'Coche tous les lieux utilis\u00e9s par cet \u00e9tablissement.':'';return `<div class="field ${type==='image'||type==='reflist'||type==='multi'||type==='textarea'?'wide':''}"><label>${esc(label)}${required?' (obligatoire)':''}</label>${html}${help?`<div class="hint">${esc(help)}</div>`:''}</div>`}
-  async function renderForm(){const table=state.table,row=state.mode==='edit'?byId(table,state.selected):{};if(table==='Association'&&state.mode==='new'&&rows('Association').length){state.mode='edit';state.selected=rows('Association')[0].id;return renderForm()}let html=`<div class="panel-head"><h2>${state.mode==='new'?'Cr\u00e9er une fiche':`Modifier : ${esc(title(table,row))}`}</h2><button id="cancel" class="btn btn-soft spacer">Retour</button></div><div class="panel-body form-wrap"><div class="form-intro">${table==='Etablissements'?'Renseigne les informations que tu connais. Les adresses et unit\u00e9s pourront \u00eatre ajout\u00e9es ensuite.':table==='Unites'?'Rattache cette unit\u00e9 \u00e0 un \u00e9tablissement et \u00e0 un lieu d\u00e9j\u00e0 enregistr\u00e9.':'Tu peux compl\u00e9ter cette fiche progressivement.'}</div><form id="entry-form">`;
-    for(const [group,fields] of F[table].groups){const advanced=group==='Suivi facultatif';const inner=`<section class="form-section"><h3>${esc(group)}</h3><div class="form-grid">${fields.map(f=>inputFor(f,row||{})).join('')}</div></section>`;html+=advanced?`<details class="advanced"><summary>Informations compl\u00e9mentaires (facultatif)</summary>${inner}</details>`:inner}
-    html+=`<div class="form-actions"><button id="save" type="submit" class="btn btn-main">${state.mode==='new'?'Enregistrer la fiche':'Enregistrer les modifications'}</button><button id="cancel-bottom" type="button" class="btn btn-soft">Annuler</button></div></form></div>`;$('view').innerHTML=html;
-    $('cancel').onclick=()=>{state.mode='view';render()};$('cancel-bottom').onclick=()=>{state.mode='view';render()};$('entry-form').onsubmit=save;
-    for(const f of F[table].groups.flatMap(x=>x[1]).filter(x=>x[1]==='image')){const id='field_'+norm(f[0]),input=$(id);input.onchange=()=>{const file=input.files?.[0];if(!file)return;if(file.size>10*1024*1024){input.value='';error('Cette image d\u00e9passe 10 Mo. Choisis une image plus l\u00e9g\u00e8re.');return}const p=$('preview_'+id);p.src=URL.createObjectURL(file);p.classList.remove('hidden')}}
-    if(table==='Unites'&&state.mode==='new'&&state.prefillEstablishment){const f=F[table].groups.flatMap(x=>x[1]).find(x=>x[0]==='\u00c9tablissement de rattachement');const el=$('field_'+norm(f[0]));if(el)el.value=state.prefillEstablishment}
+
+  async function loadData() {
+    setConnection('Lecture de Grist…');
+    try {
+      const available = await grist.docApi.listTables();
+      const missing = TABLES.filter(t => !available.includes(t));
+      if (missing.length) throw new Error(`Table(s) manquante(s) : ${missing.join(', ')}.`);
+      await loadColumnNames();
+      for (const table of TABLES) {
+        const raw = await grist.docApi.fetchTable(table);
+        const keys = Object.keys(raw).filter(k => k !== 'id');
+        state.data[table] = (raw.id || []).map((id, i) => {
+          const row = {id};
+          for (const key of keys) row[key] = raw[key]?.[i];
+          return row;
+        });
+      }
+      setConnection('Connecté à Grist');
+      applyTheme();
+      render();
+    } catch (error) {
+      setConnection('Connexion à vérifier', false);
+      setMessage(`Le widget n’a pas pu lire les tables. Dans Grist, autorise l’accès demandé par le widget, puis recharge-le.\n\nDétail : ${error?.message || error}`, 'error');
+      throw error;
+    }
   }
-  function writeValue(field,row,out){const [label,type,arg]=field;const id='field_'+norm(label);let v;if(type==='ref'){v=Number($(id)?.value)||0;set(state.table,label,v,out)}else if(type==='reflist'){const ids=Array.from(document.querySelectorAll(`input[name="${id}"]:checked`)).map(x=>Number(x.value));set(state.table,label,['r','Implantations',ids],out)}else if(type==='multi'){const vals=Array.from(document.querySelectorAll(`input[name="${id}"]:checked`)).map(x=>x.value);set(state.table,label,['L',...vals],out)}else if(type==='image'){const file=$(id)?.files?.[0];if(file)v={file};else return}else if(type==='choice'){v=$(id)?.value||null;set(state.table,label,v,out)}else if(type==='textarea'){v=$(id)?.value.trim()||null;set(state.table,label,v,out)}else if(type==='date'){v=$(id)?.value?['d',Math.floor(new Date($(id).value+'T00:00:00').getTime()/1000)]:null;set(state.table,label,v,out)}else{v=$(id)?.value.trim()||null;set(state.table,label,v,out)}}
-  async function upload(file){if(!file.type.startsWith('image/'))throw new Error('Choisis un fichier image JPG, PNG ou WebP.');if(file.size>10*1024*1024)throw new Error('Cette image d\u00e9passe 10 Mo.');const token=await grist.docApi.getAccessToken({readOnly:false});const body=new FormData();body.append('upload',file,file.name);const resp=await fetch(`${token.baseUrl}/attachments?auth=${encodeURIComponent(token.token)}`,{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest','Accept':'application/json'},body});if(!resp.ok)throw new Error(`Grist n\u2019a pas accept\u00e9 l\u2019image (erreur ${resp.status}).`);const data=await resp.json();return Array.isArray(data)?data[0]:data}
-  async function save(ev){ev.preventDefault();if(state.busy)return;clearError();const table=state.table,row=state.mode==='edit'?byId(table,state.selected):{};const payload={};try{for(const field of F[table].groups.flatMap(x=>x[1])){if(field[1]==='image'){const file=$('field_'+norm(field[0]))?.files?.[0];if(file){const attachmentId=await upload(file);set(table,field[0],['L',[attachmentId]],payload)}}else{writeValue(field,row||{},payload)}}if(table==='Association'&&!rows('Association').length&&state.mode==='edit')throw new Error('Enregistrement impossible : cr\u00e9e la fiche de charte avec le bouton Ajouter.');state.busy=true;say('Enregistrement\u2026');const api=grist.getTable(table);if(state.mode==='new'){const result=await api.create(payload);const made=result?.id??result?.[0]?.id;state.selected=Number(made)||null}else{await api.update({id:state.selected,...payload})}state.mode='view';state.prefillEstablishment=null;await load();say('Fiche enregistr\u00e9e');}catch(e){error(e?.message||String(e));say('Enregistrement \u00e0 v\u00e9rifier')}finally{state.busy=false}}
-  async function remove(){const row=byId(state.table,state.selected);if(!row)return;const id=row.id;if(state.table==='Etablissements'&&rows('Unites').some(u=>Number(get('Unites',u,'\u00c9tablissement de rattachement'))===id)){error('Cet \u00e9tablissement poss\u00e8de encore des unit\u00e9s. D\u00e9place ou supprime d\u2019abord ces unit\u00e9s, puis r\u00e9essaie.');return}if(state.table==='Implantations'&&(rows('Unites').some(u=>Number(get('Unites',u,'Implantation / lieu'))===id)||rows('Etablissements').some(e=>idList(get('Etablissements',e,'Implantations / lieux (plusieurs possibles)')).includes(id)))){error('Ce lieu est encore utilis\u00e9 par un \u00e9tablissement ou une unit\u00e9. Modifie d\u2019abord leurs rattachements, puis r\u00e9essaie.');return}if(state.table==='Poles'&&rows('Etablissements').some(e=>Number(get('Etablissements',e,'P\u00f4le de rattachement (facultatif)'))===id)){error('Des \u00e9tablissements sont encore rattach\u00e9s \u00e0 ce p\u00f4le. Modifie d\u2019abord leur rattachement, puis r\u00e9essaie.');return}if(!confirm(`Supprimer \u00ab ${title(state.table,row)} \u00bb ? Cette action supprime uniquement cette fiche.`))return;try{await grist.getTable(state.table).destroy(id);state.selected=null;state.mode='view';await load()}catch(e){error(`Impossible de supprimer cette fiche. V\u00e9rifie qu\u2019elle n\u2019est pas encore utilis\u00e9e par une unit\u00e9 ou un autre \u00e9l\u00e9ment.\n\n${e?.message||e}`)}}
-  async function render(){clearError();renderTabs();applyTheme();await renderList();await renderCard()}
-  $('new').onclick=()=>{state.mode='new';state.selected=null;render()};$('search').oninput=renderList;
-  grist.ready({requiredAccess:'full'});load();
+
+  function applyTheme() {
+    const association = rows('Association')[0];
+    const color = (label, fallback) => {
+      const v = val('Association', association, label);
+      return /^#[\da-f]{6}$/i.test(String(v || '')) ? v : fallback;
+    };
+    document.documentElement.style.setProperty('--blue', color('Couleur principale (HEX)', '#173d64'));
+    document.documentElement.style.setProperty('--orange', color('Couleur secondaire (HEX)', '#de8436'));
+    document.documentElement.style.setProperty('--green', color('Couleur d’accent (HEX)', '#a9c442'));
+    const logo = $('brand');
+    const id = attachmentIds(val('Association', association, 'Logo de l’association'))[0];
+    if (!id) { logo.textContent = 'O'; return; }
+    attachmentUrl(id).then(url => { if (url) logo.innerHTML = `<img src="${esc(url)}" alt="Logo de l’association">`; });
+  }
+
+  function attachmentIds(value) {
+    const unwrapped = unwrap(value);
+    if (Array.isArray(unwrapped)) return unwrapped.flat(Infinity).map(Number).filter(n => Number.isFinite(n) && n > 0);
+    const n = Number(unwrapped);
+    return Number.isFinite(n) && n > 0 ? [n] : [];
+  }
+  async function attachmentUrl(id) {
+    try {
+      const token = await grist.docApi.getAccessToken({readOnly: true});
+      return `${token.baseUrl}/attachments/${id}/download?auth=${encodeURIComponent(token.token)}`;
+    } catch (_) { return null; }
+  }
+  async function uploadImage(file) {
+    if (!file) return null;
+    if (!file.type.startsWith('image/')) throw new Error('Choisis un fichier image.');
+    if (file.size > 8 * 1024 * 1024) throw new Error('La photo dépasse 8 Mo. Choisis une image plus légère.');
+    const token = await grist.docApi.getAccessToken({readOnly: false});
+    const form = new FormData();
+    form.append('upload', file, file.name);
+    const response = await fetch(`${token.baseUrl}/attachments?auth=${encodeURIComponent(token.token)}`, {
+      method: 'POST', headers: {'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json'}, body: form
+    });
+    if (!response.ok) throw new Error(`Grist a refusé la photo (erreur ${response.status}).`);
+    const body = await response.json();
+    const id = Array.isArray(body) ? body[0] : (body.id ?? body.attachmentId ?? body);
+    if (!Number(id)) throw new Error('Grist a reçu la photo mais n’a pas renvoyé son identifiant.');
+    return Number(id);
+  }
+
+  function payloadFor(table, fields) {
+    const payload = {};
+    for (const [label, value] of Object.entries(fields)) {
+      const key = colId(table, label);
+      if (!key) continue;
+      payload[key] = value;
+    }
+    return payload;
+  }
+  function requiredColumn(table, label) {
+    if (!colId(table, label)) throw new Error(`La colonne « ${label} » est introuvable dans la table « ${table} ». Vérifie son intitulé dans Grist.`);
+  }
+  async function createRecord(table, fields) {
+    const payload = payloadFor(table, fields);
+    const result = await grist.getTable(table).create(payload);
+    const id = Number(result?.id ?? result?.[0]?.id);
+    if (!id) throw new Error(`Grist n’a pas confirmé la création dans la table « ${table} ».`);
+    return id;
+  }
+  async function updateRecord(table, id, fields) {
+    const payload = payloadFor(table, fields);
+    await grist.getTable(table).update({id: Number(id), ...payload});
+  }
+  function refList(table, row, label) {
+    const current = val(table, row, label);
+    if (Array.isArray(current)) return current.map(Number).filter(Boolean);
+    return current ? [Number(current)] : [];
+  }
+
+  function renderList() {
+    const query = state.search.trim().toLocaleLowerCase('fr');
+    const establishments = rows('Etablissements').filter(row => !query ||
+      `${displayName('Etablissements', row)} ${val('Etablissements', row, 'Adresse e-mail administrative') || ''}`.toLocaleLowerCase('fr').includes(query));
+    $('list-count').textContent = establishments.length;
+    if (!establishments.length) {
+      $('establishment-list').innerHTML = '<div class="empty-list">Aucune fiche pour le moment.<br>Clique sur « Créer une fiche » pour commencer.</div>';
+      return;
+    }
+    $('establishment-list').innerHTML = establishments.map(row => {
+      const active = Number(row.id) === Number(state.selected) ? ' selected' : '';
+      const subtitle = [relationName('Poles', val('Etablissements', row, 'Pôle de rattachement (facultatif)')),
+        `${refList('Etablissements', row, 'Implantations / lieux (plusieurs possibles)').length} lieu(x)`].filter(Boolean).join(' · ');
+      return `<button class="list-item${active}" data-id="${Number(row.id)}"><span class="list-icon">⌂</span><span><strong>${esc(displayName('Etablissements', row))}</strong><small>${esc(subtitle)}</small></span></button>`;
+    }).join('');
+    $('establishment-list').querySelectorAll('[data-id]').forEach(button => button.onclick = () => {
+      state.selected = Number(button.dataset.id); state.wizard.active = false; state.wizard.establishmentId = null; render();
+    });
+  }
+
+  function renderProgress(active) {
+    const names = ['Établissement', 'Lieux', 'Unités'];
+    return `<ol class="steps">${names.map((name, index) => {
+      const n = index + 1;
+      const cls = n < active ? 'done' : n === active ? 'current' : '';
+      const mark = n < active ? '✓' : String(n);
+      return `<li class="${cls}"><span>${mark}</span><b>${name}</b></li>`;
+    }).join('')}</ol>`;
+  }
+
+  function field(label, inputHtml, help = '', wide = false) {
+    return `<div class="field${wide ? ' wide' : ''}"><label>${esc(label)}</label>${inputHtml}${help ? `<small>${esc(help)}</small>` : ''}</div>`;
+  }
+  function textInput(id, label, value = '', required = false, placeholder = '', type = 'text') {
+    return field(label, `<input id="${id}" type="${type}" value="${esc(value)}" ${required ? 'required' : ''} placeholder="${esc(placeholder)}">`);
+  }
+  function selectInput(id, label, options, current = '', allowBlank = true) {
+    return field(label, `<select id="${id}">${allowBlank ? '<option value="">Aucun / choisir…</option>' : ''}${options.map(o => {
+      const option = typeof o === 'object' ? o : {id: o, name: o};
+      return `<option value="${esc(option.id)}" ${String(current) === String(option.id) ? 'selected' : ''}>${esc(option.name)}</option>`;
+    }).join('')}</select>`);
+  }
+  function fileInput(id, label, currentUrl = null) {
+    return field(label, `<input id="${id}" type="file" accept="image/png,image/jpeg,image/webp"><div class="photo-help">JPG, PNG ou WebP · 8 Mo maximum</div>${currentUrl ? `<img class="preview" src="${esc(currentUrl)}" alt="Photo actuelle">` : ''}`, 'Facultatif', true);
+  }
+  function poleOptions(selected = '') {
+    return rows('Poles').map(r => ({id: r.id, name: displayName('Poles', r)}));
+  }
+
+  function openCharterEditor() {
+    const existing = rows('Association')[0] || null;
+    const dialog = $('edit-dialog');
+    const currentColor = (label, fallback) => {
+      const value = val('Association', existing, label);
+      return /^#[\da-f]{6}$/i.test(String(value || '')) ? value : fallback;
+    };
+    dialog.innerHTML = `<div class="dialog-head"><h2>Charte graphique commune</h2><button type="button" class="icon-button" id="close-dialog" aria-label="Fermer">×</button></div><form id="charter-form" class="dialog-body"><p class="section-help">Ces informations sont saisies une seule fois pour l’association et servent de base à l’affichage des fiches.</p><div class="field-grid">
+      ${textInput('charter-name', 'Nom de l’association', val('Association', existing, 'Nom de l’association') || 'Odynéo', true)}
+      ${fileInput('charter-logo', 'Logo de l’association')}
+      ${textInput('charter-primary', 'Couleur principale (HEX)', currentColor('Couleur principale (HEX)', '#173d64'), false, '#173D64')}
+      ${textInput('charter-secondary', 'Couleur secondaire (HEX)', currentColor('Couleur secondaire (HEX)', '#de8436'), false, '#DE8436')}
+      ${textInput('charter-accent', 'Couleur d’accent (HEX)', currentColor('Couleur d’accent (HEX)', '#a9c442'), false, '#A9C442')}
+      ${textInput('charter-font', 'Police (facultative)', val('Association', existing, 'Police (facultative)') || '')}
+      ${textInput('charter-reference', 'Référence de la charte', val('Association', existing, 'Référence de la charte') || '')}
+      ${textInput('charter-date', 'Date de vérification', '', false, '', 'date')}
+      ${field('Notes (facultatif)', `<textarea id="charter-notes" rows="3">${esc(val('Association', existing, 'Notes') || '')}</textarea>`, '', true)}
+    </div><div class="dialog-actions"><button class="button primary" type="submit">Enregistrer la charte</button><button class="button quiet" id="cancel-dialog" type="button">Annuler</button></div></form>`;
+    $('close-dialog').onclick = () => dialog.close();
+    $('cancel-dialog').onclick = () => dialog.close();
+    $('charter-form').onsubmit = async event => {
+      event.preventDefault();
+      try {
+        requiredColumn('Association', 'Nom de l’association');
+        const fields = {
+          'Nom de l’association': $('charter-name').value.trim(),
+          'Couleur principale (HEX)': $('charter-primary').value.trim() || null,
+          'Couleur secondaire (HEX)': $('charter-secondary').value.trim() || null,
+          'Couleur d’accent (HEX)': $('charter-accent').value.trim() || null,
+          'Police (facultative)': $('charter-font').value.trim() || null,
+          'Référence de la charte': $('charter-reference').value.trim() || null,
+          'Date de vérification': $('charter-date').value ? ['d', Math.floor(new Date(`${$('charter-date').value}T00:00:00`).getTime() / 1000)] : null,
+          'Notes': $('charter-notes').value.trim() || null
+        };
+        const logoId = await uploadImage($('charter-logo').files?.[0]);
+        if (logoId) fields['Logo de l’association'] = ['L', logoId];
+        if (existing) await updateRecord('Association', existing.id, fields);
+        else await createRecord('Association', fields);
+        dialog.close(); await loadData(); setMessage('Charte commune enregistrée.');
+      } catch (error) { setMessage(error?.message || String(error), 'error'); }
+    };
+    dialog.showModal();
+  }
+
+  function startWizard() {
+    state.selected = null;
+    state.wizard = {active: true, step: 1, establishmentId: null, locations: [], units: []};
+    state.editor = null;
+    render();
+  }
+
+  function renderStepOne() {
+    const edit = state.wizard.establishmentId ? byId('Etablissements', state.wizard.establishmentId) : null;
+    const photoId = attachmentIds(val('Etablissements', edit, 'Photo de l’établissement'))[0];
+    const urlPromise = photoId ? attachmentUrl(photoId) : Promise.resolve(null);
+    $('main-panel').innerHTML = `<div class="form-heading"><div><h2>${edit ? 'Modifier les informations' : 'Créer une carte d’identité'}</h2><p>Commence par les informations générales. Tu pourras compléter la fiche ensuite.</p></div></div>${renderProgress(1)}<form id="step-form" class="form-card"><div class="form-section"><h3>L’établissement</h3><div class="field-grid">
+      ${textInput('est-name', 'Nom de l’établissement', val('Etablissements', edit, 'Nom de l’établissement') || '', true, 'Ex. Nom de la structure')}
+      ${selectInput('est-pole', 'Pôle de rattachement (facultatif)', poleOptions(), val('Etablissements', edit, 'Pôle de rattachement (facultatif)') || '')}
+      ${fileInput('est-photo', 'Photo de l’établissement')}
+      ${textInput('est-email', 'Adresse e-mail administrative', val('Etablissements', edit, 'Adresse e-mail administrative') || '', false, 'Ex. contact@structure.fr', 'email')}
+      ${textInput('est-phone', 'Téléphone administratif', val('Etablissements', edit, 'Téléphone administratif') || '', false, 'Ex. 04 00 00 00 00', 'tel')}
+    </div></div><div class="form-actions"><button class="button primary" type="submit">${edit ? 'Enregistrer les modifications' : 'Enregistrer et continuer'} <span>→</span></button><button class="button quiet" type="button" id="step-cancel">Annuler</button></div></form>`;
+    urlPromise.then(url => { const p = $('est-photo')?.parentElement; if (url && p && !p.querySelector('.preview')) p.insertAdjacentHTML('beforeend', `<img class="preview" src="${esc(url)}" alt="Photo actuelle">`); });
+    $('step-form').onsubmit = async event => {
+      event.preventDefault(); await saveEstablishment();
+    };
+    $('step-cancel').onclick = () => { state.selected = edit ? Number(edit.id) : null; state.wizard.active = false; state.wizard.establishmentId = null; render(); };
+  }
+
+  async function saveEstablishment() {
+    if (state.busy) return;
+    state.busy = true; setMessage('Enregistrement de l’établissement…');
+    try {
+      requiredColumn('Etablissements', 'Nom de l’établissement');
+      const photo = $('est-photo').files?.[0];
+      const fields = {
+        'Nom de l’établissement': $('est-name').value.trim(),
+        'Pôle de rattachement (facultatif)': $('est-pole').value ? Number($('est-pole').value) : null,
+        'Adresse e-mail administrative': $('est-email').value.trim() || null,
+        'Téléphone administratif': $('est-phone').value.trim() || null
+      };
+      const photoId = await uploadImage(photo);
+      if (photoId) fields['Photo de l’établissement'] = ['L', photoId];
+      if (state.wizard.establishmentId) {
+        await updateRecord('Etablissements', state.wizard.establishmentId, fields);
+      } else {
+        state.wizard.establishmentId = await createRecord('Etablissements', fields);
+      }
+      state.selected = state.wizard.establishmentId;
+      state.wizard.step = 2;
+      await loadData();
+      setMessage('Établissement enregistré. Tu peux maintenant ajouter un ou plusieurs lieux.');
+    } catch (error) { setMessage(error?.message || String(error), 'error'); }
+    finally { state.busy = false; }
+  }
+
+  function renderStepTwo() {
+    const parent = byId('Etablissements', state.wizard.establishmentId);
+    const ids = refList('Etablissements', parent, 'Implantations / lieux (plusieurs possibles)');
+    const locations = ids.map(id => byId('Implantations', id)).filter(Boolean);
+    $('main-panel').innerHTML = `<div class="form-heading"><div><h2>Ajouter les lieux</h2><p>Un lieu correspond à une adresse ou à un site. Si l’établissement n’a qu’un seul lieu, ajoute-le une seule fois.</p></div></div>${renderProgress(2)}<div class="form-card"><div class="saved-subrecords"><h3>Lieux déjà enregistrés <span>${locations.length}</span></h3>${locations.length ? locations.map(r => `<div class="saved-row"><span class="round-icon orange">⌖</span><div><strong>${esc(displayName('Implantations', r))}</strong><small>${esc([val('Implantations', r, 'Adresse'), val('Implantations', r, 'Commune')].filter(Boolean).join(' · ') || 'Adresse à compléter')}</small></div></div>`).join('') : '<div class="notice">Aucun lieu ajouté. Crée au moins un lieu pour pouvoir rattacher les unités.</div>'}</div><form id="location-form"><div class="form-section"><h3>Nouveau lieu</h3><div class="field-grid">
+      ${textInput('loc-name', 'Nom du lieu', '', true, 'Ex. Site principal')}
+      ${selectInput('loc-type', 'Type de lieu', PLACE_TYPES, '')}
+      ${textInput('loc-address', 'Adresse', '', true, 'Numéro et nom de rue')}
+      ${textInput('loc-complement', 'Complément d’adresse', '', false, 'Bâtiment, résidence…')}
+      ${textInput('loc-postcode', 'Code postal', '', true, 'Ex. 69000')}
+      ${textInput('loc-town', 'Commune', '', true, 'Ex. Lyon')}
+      ${textInput('loc-department', 'Département', '', false, 'Ex. Rhône')}
+    </div><small class="section-help">L’étage sera indiqué pour chaque unité à l’étape suivante : plusieurs unités d’un même lieu peuvent se trouver à des étages différents.</small></div><div class="form-actions"><button class="button secondary" type="submit">＋ Enregistrer ce lieu</button><button class="button primary" type="button" id="to-units">Continuer vers les unités <span>→</span></button><button class="button quiet" type="button" id="back-est">← Retour</button></div></form></div>`;
+    $('location-form').onsubmit = async event => { event.preventDefault(); await addLocation(); };
+    $('to-units').onclick = () => {
+      const latest = refList('Etablissements', byId('Etablissements', state.wizard.establishmentId), 'Implantations / lieux (plusieurs possibles)');
+      if (!latest.length) {
+        setMessage('Ajoute au moins un lieu pour cet établissement avant de continuer.', 'error'); return;
+      }
+      state.wizard.step = 3; render();
+    };
+    $('back-est').onclick = () => { state.wizard.step = 1; render(); };
+  }
+
+  async function addLocation() {
+    if (state.busy) return;
+    state.busy = true; setMessage('Enregistrement du lieu…');
+    try {
+      requiredColumn('Implantations', 'Nom du lieu / site');
+      requiredColumn('Implantations', 'Adresse');
+      requiredColumn('Implantations', 'Code postal');
+      requiredColumn('Implantations', 'Commune');
+      requiredColumn('Etablissements', 'Implantations / lieux (plusieurs possibles)');
+      const fields = {
+        'Nom du lieu / site': $('loc-name').value.trim(),
+        'Type de lieu': $('loc-type').value || null,
+        'Adresse': $('loc-address').value.trim(),
+        'Complément d’adresse': $('loc-complement').value.trim() || null,
+        'Code postal': $('loc-postcode').value.trim(),
+        'Commune': $('loc-town').value.trim(),
+        'Département': $('loc-department').value.trim() || null
+      };
+      const id = await createRecord('Implantations', fields);
+      const parent = byId('Etablissements', state.wizard.establishmentId);
+      const current = refList('Etablissements', parent, 'Implantations / lieux (plusieurs possibles)');
+      await updateRecord('Etablissements', state.wizard.establishmentId, {
+        'Implantations / lieux (plusieurs possibles)': ['r', 'Implantations', [...new Set([...current, id])]]
+      });
+      state.wizard.locations.push(id);
+      await loadData();
+      setMessage('Lieu enregistré. Tu peux en ajouter un autre ou continuer.');
+    } catch (error) { setMessage(error?.message || String(error), 'error'); }
+    finally { state.busy = false; }
+  }
+
+  function renderStepThree() {
+    const parent = byId('Etablissements', state.wizard.establishmentId);
+    const locationIds = refList('Etablissements', parent, 'Implantations / lieux (plusieurs possibles)');
+    const locations = locationIds.map(id => byId('Implantations', id)).filter(Boolean);
+    const units = rows('Unites').filter(r => Number(val('Unites', r, 'Établissement de rattachement')) === Number(state.wizard.establishmentId));
+    const locationOpts = locations.map(r => ({id: r.id, name: displayName('Implantations', r)}));
+    $('main-panel').innerHTML = `<div class="form-heading"><div><h2>Ajouter les unités</h2><p>Chaque unité est rattachée à un lieu. Tu peux en ajouter plusieurs, y compris de types différents.</p></div></div>${renderProgress(3)}<div class="form-card"><div class="saved-subrecords"><h3>Unités déjà enregistrées <span>${units.length}</span></h3>${units.length ? units.map(r => `<div class="saved-row"><span class="round-icon green">⌂</span><div><strong>${esc(displayName('Unites', r))}</strong><small>${esc([formatValue(val('Unites', r, 'Type(s) de service')), relationName('Implantations', val('Unites', r, 'Implantation / lieu')), val('Unites', r, 'Étage(s)')].filter(Boolean).join(' · '))}</small></div></div>`).join('') : '<div class="notice">Aucune unité n’a encore été ajoutée.</div>'}</div>${locations.length ? `<form id="unit-form"><div class="form-section"><h3>Nouvelle unité</h3><div class="field-grid">
+      ${textInput('unit-name', 'Nom de l’unité ou du service', '', true, 'Ex. SAJ, unité de vie…')}
+      ${selectInput('unit-location', 'Lieu de rattachement', locationOpts, locationOpts[0]?.id || '', false)}
+      ${field('Type(s) de service', `<div class="check-grid">${SERVICE_TYPES.map((t, i) => `<label class="check"><input type="checkbox" name="service-type" value="${esc(t)}" id="type-${i}"><span>${esc(t)}</span></label>`).join('')}</div>`, 'Coche un ou plusieurs types.', true)}
+      ${field('Modalités d’accueil (facultatif)', `<div class="check-grid">${WELCOME_MODES.map((t, i) => `<label class="check"><input type="checkbox" name="welcome-mode" value="${esc(t)}" id="mode-${i}"><span>${esc(t)}</span></label>`).join('')}</div>`, '', true)}
+      ${textInput('unit-building', 'Bâtiment (facultatif)', '', false, 'Ex. bâtiment B')}
+      ${textInput('unit-floor', 'Étage (facultatif)', '', false, 'Ex. rez-de-chaussée, 1er étage')}
+      ${fileInput('unit-photo', 'Photo ou logo de l’unité')}
+      <div id="orientation-field" class="field wide hidden">${field('Orientations / notifications (foyers uniquement)', '<textarea id="unit-orientation" rows="3" placeholder="Saisis les orientations utiles, sans donnée concernant les personnes accompagnées."></textarea>', 'À compléter uniquement pour les foyers.')}</div>
+    </div></div><div class="form-actions"><button class="button secondary" type="submit">＋ Enregistrer cette unité</button><button class="button primary" type="button" id="finish">Terminer</button><button class="button quiet" type="button" id="back-places">← Retour aux lieux</button></div></form>` : `<div class="notice">Aucun lieu n’est disponible. Reviens à l’étape précédente pour en ajouter un avant de créer une unité.</div><div class="form-actions"><button class="button quiet" id="back-places" type="button">← Retour aux lieux</button><button class="button primary" id="finish" type="button">Terminer sans ajouter d’unité</button></div>`}</div>`;
+    const refreshOrientation = () => {
+      const selected = Array.from(document.querySelectorAll('[name="service-type"]:checked')).map(x => x.value);
+      $('orientation-field')?.classList.toggle('hidden', !selected.some(t => t.startsWith('Foyer')));
+    };
+    document.querySelectorAll('[name="service-type"]').forEach(input => input.onchange = refreshOrientation);
+    if ($('unit-form')) $('unit-form').onsubmit = async event => { event.preventDefault(); await addUnit(); };
+    $('finish').onclick = () => { state.selected = state.wizard.establishmentId; state.wizard.active = false; state.wizard.establishmentId = null; state.editor = null; setMessage('Fiche enregistrée. Tu peux la consulter et la modifier.'); render(); };
+    $('back-places').onclick = () => { state.wizard.step = 2; render(); };
+  }
+
+  function formatValue(value) {
+    if (value == null || value === '') return '';
+    if (Array.isArray(value)) return value.join(', ');
+    return String(value);
+  }
+  async function addUnit() {
+    if (state.busy) return;
+    state.busy = true; setMessage('Enregistrement de l’unité…');
+    try {
+      requiredColumn('Unites', 'Nom de l’unité / du service');
+      requiredColumn('Unites', 'Établissement de rattachement');
+      requiredColumn('Unites', 'Implantation / lieu');
+      requiredColumn('Unites', 'Type(s) de service');
+      const types = Array.from(document.querySelectorAll('[name="service-type"]:checked')).map(x => x.value);
+      const modes = Array.from(document.querySelectorAll('[name="welcome-mode"]:checked')).map(x => x.value);
+      if (!types.length) throw new Error('Choisis au moins un type de service pour cette unité.');
+      const fields = {
+        'Nom de l’unité / du service': $('unit-name').value.trim(),
+        'Établissement de rattachement': Number(state.wizard.establishmentId),
+        'Implantation / lieu': Number($('unit-location').value),
+        'Type(s) de service': ['L', ...types],
+        'Modalités d’accueil': ['L', ...modes],
+        'Bâtiment': $('unit-building').value.trim() || null,
+        'Étage(s)': $('unit-floor').value.trim() || null
+      };
+      const orientation = $('unit-orientation')?.value.trim();
+      if (orientation) fields['Orientations / notifications (foyers uniquement)'] = orientation;
+      const photoId = await uploadImage($('unit-photo')?.files?.[0]);
+      if (photoId) fields['Photo ou logo de l’unité'] = ['L', photoId];
+      const id = await createRecord('Unites', fields);
+      state.wizard.units.push(id);
+      await loadData();
+      renderStepThree();
+      setMessage('Unité enregistrée. Tu peux en ajouter une autre ou terminer.');
+    } catch (error) { setMessage(error?.message || String(error), 'error'); }
+    finally { state.busy = false; }
+  }
+
+  function renderCard() {
+    const row = selectedEstablishment();
+    if (!row) {
+      $('main-panel').innerHTML = `<div class="welcome"><div class="welcome-mark">O</div><h2>Carte d’identité des établissements</h2><p>Crée une fiche, puis ajoute les lieux et les unités de l’établissement. Chaque étape est enregistrée dans Grist.</p><button class="button primary large" id="start-first">＋ Créer une fiche</button></div>`;
+      $('start-first').onclick = startWizard;
+      return;
+    }
+    const pole = relationName('Poles', val('Etablissements', row, 'Pôle de rattachement (facultatif)'));
+    const establishmentPhotoId = attachmentIds(val('Etablissements', row, 'Photo de l’établissement'))[0];
+    const linkedLocationIds = refList('Etablissements', row, 'Implantations / lieux (plusieurs possibles)');
+    const locations = linkedLocationIds.map(id => byId('Implantations', id)).filter(Boolean);
+    const units = rows('Unites').filter(u => Number(val('Unites', u, 'Établissement de rattachement')) === Number(row.id));
+    const photoPromise = establishmentPhotoId ? attachmentUrl(establishmentPhotoId) : Promise.resolve(null);
+    $('main-panel').innerHTML = `<div class="identity-card"><div class="identity-photo" id="identity-photo">⌂</div><div class="identity-main"><div class="saved-label"><i></i> Fiche enregistrée</div><h2>${esc(displayName('Etablissements', row))}</h2><div class="identity-meta">${pole ? `<span><b>Pôle</b>${esc(pole)}</span>` : ''}${val('Etablissements', row, 'Adresse e-mail administrative') ? `<span><b>Courriel administratif</b>${esc(val('Etablissements', row, 'Adresse e-mail administrative'))}</span>` : ''}${val('Etablissements', row, 'Téléphone administratif') ? `<span><b>Téléphone</b>${esc(val('Etablissements', row, 'Téléphone administratif'))}</span>` : ''}</div></div><div class="identity-actions"><button class="button secondary" id="edit-est">Modifier la fiche</button><button class="icon-button danger" id="delete-est" title="Supprimer cette fiche" aria-label="Supprimer">×</button></div></div>
+      <section class="content-section"><div class="section-heading"><div><span class="section-icon orange">⌖</span><div><h3>Lieux associés</h3><p>${locations.length} lieu(x) enregistré(s)</p></div></div><button class="button secondary small" id="add-place">＋ Ajouter un lieu</button></div>${locations.length ? `<div class="location-grid">${locations.map(place => `<article class="location-card"><div class="location-symbol">⌖</div><div><strong>${esc(displayName('Implantations', place))}</strong><p>${esc([val('Implantations', place, 'Adresse'), val('Implantations', place, 'Code postal'), val('Implantations', place, 'Commune')].filter(Boolean).join(', ') || 'Adresse non renseignée')}</p></div><div class="related-actions"><button class="mini-edit" data-edit-place="${place.id}">Modifier</button><button class="mini-action" data-delete-place="${place.id}" title="Supprimer ce lieu" aria-label="Supprimer ce lieu">×</button></div></article>`).join('')}</div>` : '<div class="empty-inline">Aucun lieu enregistré pour le moment.</div>'}</section>
+      <section class="content-section"><div class="section-heading"><div><span class="section-icon green">⌂</span><div><h3>Unités de l’établissement</h3><p>${units.length} unité(s) enregistrée(s)</p></div></div><button class="button secondary small" id="add-unit-card">＋ Ajouter une unité</button></div>${units.length ? `<div class="unit-grid">${units.map(unit => `<article class="unit-card"><div class="unit-symbol">●</div><div><strong>${esc(displayName('Unites', unit))}</strong><p>${esc([formatValue(val('Unites', unit, 'Type(s) de service')), relationName('Implantations', val('Unites', unit, 'Implantation / lieu')), val('Unites', unit, 'Étage(s)')].filter(Boolean).join(' · '))}</p></div><div class="related-actions"><button class="mini-edit" data-edit-unit="${unit.id}">Modifier</button><button class="mini-action" data-delete-unit="${unit.id}" title="Supprimer cette unité" aria-label="Supprimer cette unité">×</button></div></article>`).join('')}</div>` : '<div class="empty-inline">Aucune unité enregistrée pour le moment.</div>'}</section>
+      <div class="association-note">La charte graphique est commune à l’association et ne se ressaisit pas sur chaque fiche.</div>`;
+    photoPromise.then(url => { if (url && $('identity-photo')) $('identity-photo').innerHTML = `<img src="${esc(url)}" alt="Photo de l’établissement">`; });
+    $('edit-est').onclick = () => { state.wizard = {active: true, step: 1, establishmentId: Number(row.id), locations: [], units: []}; renderStepOne(); };
+    $('add-place').onclick = () => startWizardAt(2, row.id);
+    $('add-unit-card').onclick = () => {
+      const hasLocation = refList('Etablissements', row, 'Implantations / lieux (plusieurs possibles)').length > 0;
+      startWizardAt(hasLocation ? 3 : 2, row.id);
+    };
+    $('delete-est').onclick = () => deleteEstablishment(row);
+    document.querySelectorAll('[data-edit-place]').forEach(b => b.onclick = () => editRelated('Implantations', Number(b.dataset.editPlace)));
+    document.querySelectorAll('[data-edit-unit]').forEach(b => b.onclick = () => editRelated('Unites', Number(b.dataset.editUnit)));
+    document.querySelectorAll('[data-delete-place]').forEach(b => b.onclick = () => deleteLocation(Number(b.dataset.deletePlace), row.id));
+    document.querySelectorAll('[data-delete-unit]').forEach(b => b.onclick = () => deleteUnit(Number(b.dataset.deleteUnit)));
+  }
+
+  function startWizardAt(step, establishmentId) {
+    state.wizard = {active: true, step, establishmentId: Number(establishmentId), locations: [], units: []};
+    render();
+  }
+
+  function editRelated(table, id) {
+    const row = byId(table, id);
+    if (!row) return;
+    const dialog = $('edit-dialog');
+    const isLocation = table === 'Implantations';
+    const title = isLocation ? 'Modifier le lieu' : 'Modifier l’unité';
+    let body = '';
+    if (isLocation) {
+      body = `<div class="field-grid">
+        ${textInput('edit-name', 'Nom du lieu', val(table, row, 'Nom du lieu / site') || '', true)}
+        ${selectInput('edit-type', 'Type de lieu', PLACE_TYPES, val(table, row, 'Type de lieu') || '')}
+        ${textInput('edit-address', 'Adresse', val(table, row, 'Adresse') || '', true)}
+        ${textInput('edit-complement', 'Complément d’adresse', val(table, row, 'Complément d’adresse') || '')}
+        ${textInput('edit-postcode', 'Code postal', val(table, row, 'Code postal') || '', true)}
+        ${textInput('edit-town', 'Commune', val(table, row, 'Commune') || '', true)}
+        ${textInput('edit-department', 'Département', val(table, row, 'Département') || '')}
+      </div>`;
+    } else {
+      const currentTypes = val(table, row, 'Type(s) de service');
+      const typeSet = new Set(Array.isArray(currentTypes) ? currentTypes : currentTypes ? [currentTypes] : []);
+      const currentModes = val(table, row, 'Modalités d’accueil');
+      const modeSet = new Set(Array.isArray(currentModes) ? currentModes : currentModes ? [currentModes] : []);
+      const locations = refList('Etablissements', selectedEstablishment(), 'Implantations / lieux (plusieurs possibles)')
+        .map(placeId => byId('Implantations', placeId)).filter(Boolean).map(place => ({id: place.id, name: displayName('Implantations', place)}));
+      body = `<div class="field-grid">
+        ${textInput('edit-name', 'Nom de l’unité ou du service', val(table, row, 'Nom de l’unité / du service') || '', true)}
+        ${selectInput('edit-location', 'Lieu de rattachement', locations, val(table, row, 'Implantation / lieu'), false)}
+        ${field('Type(s) de service', `<div class="check-grid">${SERVICE_TYPES.map((t, i) => `<label class="check"><input type="checkbox" name="edit-service-type" value="${esc(t)}" ${typeSet.has(t) ? 'checked' : ''}><span>${esc(t)}</span></label>`).join('')}</div>`, '', true)}
+        ${field('Modalités d’accueil (facultatif)', `<div class="check-grid">${WELCOME_MODES.map(t => `<label class="check"><input type="checkbox" name="edit-welcome-mode" value="${esc(t)}" ${modeSet.has(t) ? 'checked' : ''}><span>${esc(t)}</span></label>`).join('')}</div>`, '', true)}
+        ${textInput('edit-building', 'Bâtiment (facultatif)', val(table, row, 'Bâtiment') || '')}
+        ${textInput('edit-floor', 'Étage (facultatif)', val(table, row, 'Étage(s)') || '')}
+        ${field('Orientations / notifications (foyers uniquement)', `<textarea id="edit-orientation" rows="3">${esc(val(table, row, 'Orientations / notifications (foyers uniquement)') || '')}</textarea>`, 'À utiliser uniquement pour les foyers.', true)}
+      </div>`;
+    }
+    dialog.innerHTML = `<div class="dialog-head"><h2>${title}</h2><button type="button" class="icon-button" id="close-dialog" aria-label="Fermer">×</button></div><form id="edit-form" class="dialog-body">${body}<div class="dialog-actions"><button class="button primary" type="submit">Enregistrer les modifications</button><button class="button quiet" id="cancel-dialog" type="button">Annuler</button></div></form>`;
+    const close = () => dialog.close();
+    $('close-dialog').onclick = close;
+    $('cancel-dialog').onclick = close;
+    $('edit-form').onsubmit = async event => {
+      event.preventDefault();
+      try {
+        let fields;
+        if (isLocation) {
+          fields = {
+            'Nom du lieu / site': $('edit-name').value.trim(), 'Type de lieu': $('edit-type').value || null,
+            'Adresse': $('edit-address').value.trim(), 'Complément d’adresse': $('edit-complement').value.trim() || null,
+            'Code postal': $('edit-postcode').value.trim(), 'Commune': $('edit-town').value.trim(),
+            'Département': $('edit-department').value.trim() || null
+          };
+        } else {
+          fields = {
+            'Nom de l’unité / du service': $('edit-name').value.trim(),
+            'Implantation / lieu': Number($('edit-location').value),
+            'Type(s) de service': ['L', ...Array.from(document.querySelectorAll('[name="edit-service-type"]:checked')).map(x => x.value)],
+            'Modalités d’accueil': ['L', ...Array.from(document.querySelectorAll('[name="edit-welcome-mode"]:checked')).map(x => x.value)],
+            'Bâtiment': $('edit-building').value.trim() || null, 'Étage(s)': $('edit-floor').value.trim() || null,
+            'Orientations / notifications (foyers uniquement)': $('edit-orientation').value.trim() || null
+          };
+        }
+        await updateRecord(table, id, fields);
+        close(); await loadData(); setMessage('Modifications enregistrées.');
+      } catch (error) { setMessage(error?.message || String(error), 'error'); }
+    };
+    dialog.showModal();
+  }
+
+  async function deleteEstablishment(row) {
+    const id = Number(row.id);
+    const hasUnits = rows('Unites').some(u => Number(val('Unites', u, 'Établissement de rattachement')) === id);
+    const hasLocations = refList('Etablissements', row, 'Implantations / lieux (plusieurs possibles)').length > 0;
+    const usedForPole = rows('Poles').some(p => Number(val('Poles', p, 'Établissement de rattachement administratif')) === id);
+    if (hasUnits) { setMessage('Supprime ou rattache d’abord les unités de cet établissement.', 'error'); return; }
+    if (hasLocations) { setMessage('Supprime d’abord les lieux associés à cet établissement.', 'error'); return; }
+    if (usedForPole) { setMessage('Cet établissement est le point de rattachement administratif d’un pôle. Modifie ce rattachement avant de le supprimer.', 'error'); return; }
+    if (!confirm(`Supprimer la fiche « ${displayName('Etablissements', row)} » ?`)) return;
+    try { await grist.getTable('Etablissements').destroy(id); state.selected = null; await loadData(); setMessage('Fiche supprimée.'); }
+    catch (error) { setMessage(error?.message || String(error), 'error'); }
+  }
+  async function deleteLocation(id, establishmentId) {
+    if (rows('Unites').some(u => Number(val('Unites', u, 'Implantation / lieu')) === id)) {
+      setMessage('Ce lieu est utilisé par une unité. Modifie ou supprime cette unité avant de supprimer le lieu.', 'error'); return;
+    }
+    const linkedElsewhere = rows('Etablissements').some(e => Number(e.id) !== Number(establishmentId) && refList('Etablissements', e, 'Implantations / lieux (plusieurs possibles)').includes(id));
+    if (linkedElsewhere) { setMessage('Ce lieu est aussi rattaché à un autre établissement. Retire ce rattachement avant de le supprimer.', 'error'); return; }
+    if (!confirm('Supprimer ce lieu ?')) return;
+    try {
+      const parent = byId('Etablissements', establishmentId);
+      const ids = refList('Etablissements', parent, 'Implantations / lieux (plusieurs possibles)').filter(n => n !== id);
+      await updateRecord('Etablissements', establishmentId, {'Implantations / lieux (plusieurs possibles)': ['r', 'Implantations', ids]});
+      await grist.getTable('Implantations').destroy(id);
+      await loadData(); setMessage('Lieu supprimé.');
+    } catch (error) { setMessage(error?.message || String(error), 'error'); }
+  }
+  async function deleteUnit(id) {
+    const row = byId('Unites', id);
+    if (!row || !confirm(`Supprimer l’unité « ${displayName('Unites', row)} » ?`)) return;
+    try { await grist.getTable('Unites').destroy(id); await loadData(); setMessage('Unité supprimée.'); }
+    catch (error) { setMessage(error?.message || String(error), 'error'); }
+  }
+
+  function render() {
+    renderList();
+    if (state.wizard.active && state.wizard.step === 1) return renderStepOne();
+    if (state.wizard.active && state.wizard.establishmentId && state.wizard.step === 2) return renderStepTwo();
+    if (state.wizard.active && state.wizard.establishmentId && state.wizard.step === 3) return renderStepThree();
+    return renderCard();
+  }
+
+  $('new-establishment').onclick = startWizard;
+  $('edit-charter').onclick = openCharterEditor;
+  $('search').oninput = event => { state.search = event.target.value; renderList(); };
+
+  async function start() {
+    try {
+      if (!window.grist) throw new Error('L’API Grist ne s’est pas chargée. Ouvre cette page comme widget personnalisé dans Grist.');
+      await grist.ready({requiredAccess: 'full'});
+      await loadData();
+    } catch (error) {
+      setConnection('Connexion à vérifier', false);
+      setMessage(`Impossible de se connecter à Grist. Vérifie l’adresse du widget et autorise son accès dans Grist.\n\nDétail : ${error?.message || error}`, 'error');
+    }
+  }
+  start();
 })();
