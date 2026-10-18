@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#173d64">
+  <title>Carte d’identité Odynéo</title>
+  <link rel="stylesheet" href="./style.css">
+  <script>
+    // Charge l’API depuis l’instance Grist qui ouvre ce widget.
+    // En aperçu hors de Grist, utilise l’instance publique Grist.
+    (function () {
+      let gristOrigin = 'https://docs.getgrist.com';
+      try {
+        if (document.referrer) gristOrigin = new URL(document.referrer).origin;
+      } catch (_) {}
+      document.write('<script src="' + gristOrigin + '/grist-plugin-api.js"><\/script>');
+    })();
+  </script>
+</head>
+<body>
+<main class="app">
+  <header class="header"><div id="brand" class="brand">O</div><div><h1>Carte d’identité des établissements</h1><p>Les informations communes se saisissent une fois. Les unités et les lieux se rattachent ensuite à l’établissement.</p></div><div id="connection" class="connection">Connexion à Grist…</div></header>
+  <nav id="tabs" class="tabs" aria-label="Rubriques"></nav>
+  <div id="error" class="error hidden"></div>
+  <section class="layout">
+    <aside id="list-panel" class="panel"><div class="panel-head"><h2 id="list-title">Établissements</h2><button id="new" class="btn btn-main spacer">＋ Ajouter</button></div><div class="panel-body"><input id="search" class="search" placeholder="Rechercher par nom…"><div id="list" class="list"></div></div></aside>
+    <section id="content" class="panel"><div id="view"></div></section>
+  </section>
+</main>
+  <script src="./script.js" defer></script>
+</body>
+</html>
