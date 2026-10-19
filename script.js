@@ -7,7 +7,7 @@
     Poles: ['Nom du pôle', 'Établissement administratif', 'Logo du pôle'],
     Etablissements: ["Nom de l'établissement", 'Public de l’établissement', 'Pôle de rattachement (facultatif)', "Logo ou photo de l’établissement", 'Adresse administrative'],
     Implantations: ['Établissement de rattachement', 'Nom du lieu', 'Adresse complète', 'Étage(s)', 'Photo du lieu'],
-    Unites: ["Nom de l'unité", 'Type de service', 'Précision du type (si autre)', 'Public accueilli par l’unité', 'Précisions sur le public', 'Lieu', 'Étage', "Modalités d'accueil", 'Orientations / notifications (foyers uniquement)', "Photo ou logo de l'unité"]
+    Unites: ["Nom de l'unité", 'Type de service', 'Précision du type (si autre)', 'Public accueilli par l’unité', 'Précisions sur le public', 'Lieu', 'Étage', "Modalités d'accueil", 'Orientations / notifications (foyers uniquement)', "Photo ou logo de l'unité", 'Établissement de rattachement (facultatif)', 'Pôle de rattachement (facultatif)']
   };
   const SERVICE_TYPES = [
     'Foyer de vie (FV)', 'Foyer d’hébergement (FH)',
@@ -39,7 +39,7 @@
     {label:'Autre public / à préciser', description:'À préciser dans le champ complémentaire.'}
   ];
   const $ = id => document.getElementById(id);
-  const state = {data:{}, columns:{}, page:'home', wizard:{step:1, establishmentId:null, editing:false}, search:'', busy:false};
+  const state = {data:{}, columns:{}, page:'home', wizard:{step:1, establishmentId:null, poleId:null, editing:false, returnPage:'home'}, search:'', busy:false};
   const norm = s => String(s ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]/g,'');
   const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const unwrap = v => {
@@ -196,8 +196,9 @@
     if(file){const id=await uploadImage(file);if(id)fields[label]=['L',id];}
     else if(currentId&&$(inputId+'-clear')?.checked)fields[label]=['L'];
   }
-  function stepProgress(current){
-    const steps=['Établissement','Lieux','Unités / services'];
+  function stepProgress(current,directPole=false){
+    const steps=directPole?['Pôle','Services / unités']:['Établissement','Lieux','Services / unités'];
+    if(directPole)current=2;
     return '<ol class="steps">'+steps.map((s,i)=>{const n=i+1,cl=n<current?'done':n===current?'current':'';return '<li class="'+cl+'"><span>'+(n<current?'✓':n)+'</span><b>'+s+'</b></li>';}).join('')+'</ol>';
   }
   function setHeader(title,sub=''){
@@ -207,6 +208,7 @@
     showMessage('');
     if(state.page==='wizard')return renderWizard();
     if(state.page==='card')return renderCard();
+    if(state.page==='pole')return renderPoleCard();
     renderHome();
   }
   function renderHome(){
@@ -223,28 +225,31 @@
       const photo=attachmentIds(val('Etablissements',r,"Logo ou photo de l’établissement"))[0];
       return '<button class="est-card-button" data-open="'+Number(r.id)+'"><span class="est-thumb" id="thumb-'+Number(r.id)+'">'+(photo?'⌂':'⌂')+'</span><span><strong>'+esc(recordTitle('Etablissements',r))+'</strong><small>'+esc([val('Etablissements',r,'Public de l’établissement'),pole?recordTitle('Poles',pole):'',places.length+' lieu(x)'].filter(Boolean).join(' · '))+'</small></span></button>';
     }).join(''):'<div class="empty-state"><h2>Aucune fiche pour le moment</h2><p>Commence par créer une carte d’identité.</p><button class="button primary" id="new-empty">＋ Créer une fiche</button></div>';
-    $('list').querySelectorAll('[data-open]').forEach(b=>b.onclick=()=>{state.wizard.establishmentId=Number(b.dataset.open);state.page='card';render();});
+    $('list').querySelectorAll('[data-open]').forEach(b=>b.onclick=()=>{state.wizard.establishmentId=Number(b.dataset.open);state.wizard.poleId=readRelation('Etablissements',byId('Etablissements',state.wizard.establishmentId),'Pôle de rattachement (facultatif)');state.page='card';render();});
     $('list').querySelectorAll('[data-open]').forEach(b=>{const id=Number(b.dataset.open),r=byId('Etablissements',id),photo=attachmentIds(val('Etablissements',r,"Logo ou photo de l’établissement"))[0];if(photo)attachmentUrl(photo).then(url=>{const el=$('thumb-'+id);if(url&&el)el.innerHTML='<img src="'+esc(url)+'" alt="">';});});
     $('new-empty')?.addEventListener('click',()=>startWizard());
   }
-  function startWizard(id=null,editing=false,step=1){
-    state.page='wizard';state.wizard={step,establishmentId:id,editing};renderWizard();
+  function startWizard(id=null,editing=false,step=1,poleId=null){
+    const est=id?byId('Etablissements',id):null;
+    if(est&&!poleId)poleId=readRelation('Etablissements',est,'Pôle de rattachement (facultatif)');
+    state.page='wizard';state.wizard={step,establishmentId:id,poleId,editing,returnPage:est?'card':poleId?'pole':'home'};renderWizard();
   }
   function renderWizard(){
     const step=state.wizard.step,est=state.wizard.establishmentId?byId('Etablissements',state.wizard.establishmentId):null;
-    setHeader('Créer une carte d’identité','Les données sont enregistrées dans Grist au fur et à mesure.');
+    const directPole=!est&&Number(state.wizard.poleId)>0;
+    setHeader(directPole?'Ajouter un service ou une unité au pôle':'Créer une carte d’identité',directPole?'Le pôle est déjà choisi. Vous pourrez ajouter plusieurs fiches.':'Les données sont enregistrées dans Grist au fur et à mesure.');
     let body='';
     if(step===1)body=renderStepOne(est);
     if(step===2)body=renderStepTwo(est);
     if(step===3)body=renderStepThree(est);
-    $('main-panel').innerHTML='<div class="wizard-top"><span></span><button class="button quiet small" id="cancel-wizard">← Retour</button></div>'+stepProgress(step)+body;
-    $('cancel-wizard').onclick=()=>{state.page=est?'card':'home';state.wizard={step:1,establishmentId:null,editing:false};render();};
+    $('main-panel').innerHTML='<div class="wizard-top"><span></span><button class="button quiet small" id="cancel-wizard">← Retour</button></div>'+stepProgress(step,directPole)+body;
+    $('cancel-wizard').onclick=()=>{state.page=state.wizard.returnPage||'home';render();};
     if(step===1)wireStepOne(est);
     if(step===2)wireStepTwo(est);
     if(step===3)wireStepThree(est);
   }
   function renderStepOne(est){
-    const pole=readRelation('Etablissements',est,'Pôle de rattachement (facultatif)');
+    const pole=est?readRelation('Etablissements',est,'Pôle de rattachement (facultatif)'):(Number(state.wizard.poleId)||null);
     const photo=attachmentIds(val('Etablissements',est,"Logo ou photo de l’établissement"))[0];
     const poleRecord=byId('Poles',pole),poleLogo=attachmentIds(val('Poles',poleRecord,'Logo du pôle'))[0];
     return '<div class="wizard-card"><h3>Informations sur l’établissement</h3><p class="wizard-intro">Renseignez les informations générales de votre établissement.</p><form id="est-form"><div class="field-grid">'+
@@ -278,6 +283,7 @@
         await applyPhotoChange(poleFields,'Logo du pôle','pole-logo',currentPoleLogo);
         if(Object.keys(poleFields).length&&!selectedPole)throw new Error('Sélectionnez un pôle avant de modifier son logo.');
         if(est)await updateRow('Etablissements',est.id,fields);else state.wizard.establishmentId=await createRow('Etablissements',fields);
+        state.wizard.poleId=selectedPole;
         if(Object.keys(poleFields).length)await updateRow('Poles',selectedPole,poleFields);
         await loadData();if(state.wizard.editing){state.page='card';state.wizard.editing=false;render();showMessage('Les modifications ont été enregistrées.','success');}
         else{state.wizard.step=2;renderWizard();showMessage('Établissement enregistré. Ajoutez maintenant au moins un lieu.','success');}
@@ -287,14 +293,14 @@
   function placesFor(est){return rows('Implantations').filter(p=>readRelation('Implantations',p,'Établissement de rattachement')===Number(est?.id));}
   function renderStepTwo(est){
     const places=placesFor(est);
-    return '<div class="wizard-card"><h3>Ajouter les lieux</h3><p class="wizard-intro">Ajoutez les lieux de l’établissement. Même avec un seul site, créez un lieu pour pouvoir y rattacher les unités.</p>'+
+    return '<div class="wizard-card"><h3>Ajouter des lieux</h3><p class="wizard-intro">Ajoutez les adresses et bâtiments utiles. Vous pouvez aussi passer cette étape et rattacher les services plus tard.</p>'+
       '<div class="saved-list">'+(places.length?places.map((p,i)=>placeRow(p,i)).join(''):'')+'</div><form id="place-form"><div class="form-section"><div class="field-grid">'+
       inputField('place-name','Nom du lieu','',{required:true,placeholder:'Ex. Bâtiment principal'})+
       inputField('place-address','Adresse complète','',{required:true,textarea:true,wide:true,placeholder:'Numéro, rue, code postal et commune'})+
       inputField('place-floor','Étage(s) (facultatif)','',{placeholder:'Ex. rez-de-chaussée, 1er étage'})+
       photoField('place-photo','Photo du lieu')+
       '</div></div><div class="form-actions"><button class="button secondary" type="submit">＋ Ajouter un lieu</button><button class="button primary" id="continue-units" type="button">Enregistrer et continuer <span>→</span></button></div></form>'+
-      '<div class="info-box"><strong>À savoir</strong> Vous pouvez ajouter plusieurs lieux. Les unités seront ensuite rattachées à l’un d’eux.</div></div>';
+      '<div class="info-box"><strong>À savoir</strong> Un lieu est facultatif. Vous pourrez ajouter plusieurs lieux et rattacher les services à un lieu quand vous le connaissez.</div></div>';
   }
   function placeRow(p,i){
     const image=attachmentIds(val('Implantations',p,'Photo du lieu'))[0];
@@ -309,57 +315,127 @@
         await createRow('Implantations',fields);await loadData();showMessage('Lieu enregistré. Vous pouvez en ajouter un autre.','success');
       }catch(err){showMessage(err.message||String(err),'error');}finally{state.busy=false;}
     };
-    $('continue-units').onclick=()=>{if(!placesFor(est).length){showMessage('Ajoutez au moins un lieu avant de continuer.','error');return;}state.wizard.step=3;renderWizard();};
+    $('continue-units').onclick=()=>{state.wizard.step=3;renderWizard();};
     $('main-panel').querySelectorAll('[data-edit-place]').forEach(b=>b.onclick=()=>editPlace(Number(b.dataset.editPlace)));
     $('main-panel').querySelectorAll('[data-delete-place]').forEach(b=>b.onclick=()=>removePlace(Number(b.dataset.deletePlace)));
     placesFor(est).forEach(p=>{const id=attachmentIds(val('Implantations',p,'Photo du lieu'))[0];if(id)attachmentUrl(id).then(url=>{const el=$('place-thumb-'+p.id);if(el&&url)el.innerHTML='<img src="'+esc(url)+'" alt="">';});});
   }
-  function unitsFor(est){const ids=placesFor(est).map(p=>Number(p.id));return rows('Unites').filter(u=>ids.includes(readRelation('Unites',u,'Lieu')));}
+  function unitsFor(est){
+    if(!est)return unitsForPole(state.wizard.poleId);
+    const id=Number(est.id),placeIds=placesFor(est).map(p=>Number(p.id));
+    return rows('Unites').filter(u=>{
+      const parentEst=readRelation('Unites',u,'Établissement de rattachement (facultatif)'),parentPole=readRelation('Unites',u,'Pôle de rattachement (facultatif)');
+      if(parentEst)return parentEst===id;if(parentPole)return false;
+      return placeIds.includes(readRelation('Unites',u,'Lieu'));
+    });
+  }
+  function unitsForPole(id){return rows('Unites').filter(u=>readRelation('Unites',u,'Pôle de rattachement (facultatif)')===Number(id));}
+  function establishmentsForPole(id){return rows('Etablissements').filter(e=>readRelation('Etablissements',e,'Pôle de rattachement (facultatif)')===Number(id));}
+  function placesForPole(id){
+    const estIds=new Set([...establishmentsForPole(id).map(e=>Number(e.id)),...rows('Poles').filter(p=>Number(p.id)===Number(id)).map(p=>readRelation('Poles',p,'Établissement administratif')).filter(Boolean)]);
+    return rows('Implantations').filter(p=>estIds.has(readRelation('Implantations',p,'Établissement de rattachement')));
+  }
   function renderStepThree(est){
-    const units=unitsFor(est),places=placesFor(est);
+    const directPole=!est&&Number(state.wizard.poleId)>0;
+    const units=est?unitsFor(est):unitsForPole(state.wizard.poleId);
+    const places=est?placesFor(est):placesForPole(state.wizard.poleId);
     const options=places.map(p=>'<option value="'+Number(p.id)+'">'+esc(recordTitle('Implantations',p))+'</option>').join('');
-    return '<div class="wizard-card"><h3>Ajouter les unités / services</h3><p class="wizard-intro">Renseignez les unités et les services qui composent votre établissement.</p>'+
-      (units.length?'<div class="saved-list">'+units.map(unitRow).join('')+'</div>':'')+
+    const owner=est?'l’établissement « '+recordTitle('Etablissements',est)+' »':'le pôle « '+recordTitle('Poles',byId('Poles',state.wizard.poleId))+' »';
+    return '<div class="wizard-card"><h3>Ajouter des services ou des unités</h3><p class="wizard-intro">Chaque service, foyer ou unité a sa propre fiche. Vous pouvez en ajouter plusieurs à '+esc(owner)+'.</p>'+ 
+      '<div class="info-box"><strong>Rattachement choisi</strong>Cette fiche sera rattachée à '+esc(owner)+'. Le lieu est facultatif.</div>'+
+      (units.length?'<h4>Déjà enregistrés</h4><div class="saved-list">'+units.map(unitRow).join('')+'</div>':'')+
       '<form id="unit-form"><div class="field-grid">'+
-      inputField('unit-name',"Nom de l’unité",'',{required:true,placeholder:'Ex. Unité de vie 1'})+
-      selectField('unit-type','Type de service ou d’unité',serviceTypeOptions(),'',true,'Choisissez le service réellement porté par cette unité. Créez une unité distincte si plusieurs services coexistent.')+
+      inputField('unit-name',"Nom du service, foyer ou unité",'',{required:true,placeholder:'Ex. Foyer de vie, SAJ ou unité de vie'})+
+      selectField('unit-type','Type de service ou d’unité',serviceTypeOptions(),'',true,'Choisissez le type qui correspond à cette fiche.')+
       '<div id="unit-other" class="wide hidden">'+inputField('unit-type-other','Précision du type (si « Autre »)','',{placeholder:'À préciser'})+'</div>'+
-      selectField('unit-place','Lieu',options,'',true)+
-      inputField('unit-floor','Étage de l’unité (facultatif)','',{placeholder:'Ex. rez-de-chaussée, 1er étage'})+
-      photoField('unit-photo','Photo ou logo')+
+      selectField('unit-place','Lieu (facultatif)',placeOptions(places),'',false,'Vous pourrez rattacher un lieu plus tard en modifiant cette fiche.')+
+      inputField('unit-floor','Étage (facultatif)','',{placeholder:'Ex. rez-de-chaussée, 1er étage'})+
+      photoField('unit-photo','Photo ou logo (facultatif)')+
       publicProfileField('unit-publics',[])+
-      '<details class="extra-section wide"><summary>Informations complémentaires (facultatif)</summary><div class="extra-content">'+
-      inputField('unit-public-details','Précisions sur le public','',{textarea:true,placeholder:'Précisez les besoins ou particularités propres à cette unité.',wide:true})+multiSelectField('unit-modalities',"Modalités d’accueil",MODALITIES,[],'Choisissez une ou plusieurs modalités. Elles précisent comment le service accueille ou accompagne.')+
-      '<div id="unit-notifications" class="'+(isFoyer('')?'':'hidden')+'">'+multiSelectField('unit-notifications-list','Orientations / notifications accueillies (foyers uniquement)',FOYER_NOTIFICATIONS,[],'À renseigner seulement pour un foyer. Plusieurs orientations peuvent être sélectionnées.')+'</div></div></details>'+
-      '</div><div class="form-actions"><button class="button secondary" type="submit">＋ Ajouter une unité</button><button class="button primary" type="button" id="finish-wizard">Voir la carte enregistrée <span>→</span></button></div></form>'+
-      '<div class="ready-banner"><span class="ready-icon">✓</span><span><strong>'+(units.length?'Votre fiche est prête':'Votre établissement et ses lieux sont enregistrés')+'</strong><small>'+(units.length?'Vous avez renseigné les informations principales de votre établissement, de ses lieux et de ses unités.':'Vous pourrez ajouter une unité depuis la fiche enregistrée.')+'</small></span></div></div>';
+      '<details class="extra-section wide"><summary>Autres informations (facultatif)</summary><div class="extra-content">'+
+      inputField('unit-public-details','Précisions sur le public','',{textarea:true,placeholder:'À compléter si nécessaire.',wide:true})+multiSelectField('unit-modalities',"Modalités d’accueil",MODALITIES,[],'Choisissez une ou plusieurs réponses si vous les connaissez.')+
+      '<div id="unit-notifications" class="'+(isFoyer('')?'':'hidden')+'">'+multiSelectField('unit-notifications-list','Orientations / notifications (foyers uniquement)',FOYER_NOTIFICATIONS,[],'À renseigner seulement pour un foyer.')+'</div></div></details>'+ 
+      '</div><div class="form-actions"><button class="button secondary" type="submit">＋ Enregistrer cette fiche</button><button class="button primary" type="button" id="finish-wizard">Voir la fiche enregistrée <span>→</span></button></div></form>'+ 
+      '<div class="ready-banner"><span class="ready-icon">✓</span><span><strong>'+ (units.length?'Les fiches sont enregistrées':'Vous pouvez continuer plus tard')+'</strong><small>Chaque fiche est enregistrée séparément et peut être modifiée ou supprimée.</small></span></div></div>';
   }
   function unitRow(u){
-    const place=byId('Implantations',readRelation('Unites',u,'Lieu')),img=attachmentIds(val('Unites',u,"Photo ou logo de l'unité"))[0];
+    const place=byId('Implantations',readRelation('Unites',u,'Lieu')),img=attachmentIds(val('Unites',u,"Photo ou logo de l'unité"))[0],parentLabel=unitParentLabel(u);
     const audiences=listValue('Unites',u,'Public accueilli par l’unité'), modes=listValue('Unites',u,"Modalités d'accueil"), notices=listValue('Unites',u,'Orientations / notifications (foyers uniquement)');
-    return '<div class="saved-row"><span class="saved-image" id="unit-thumb-'+Number(u.id)+'">'+(img?'⌂':'⌂')+'</span><span class="saved-row-body"><strong>'+esc(recordTitle('Unites',u))+'</strong><small>'+esc([val('Unites',u,'Type de service'),place?recordTitle('Implantations',place):'',val('Unites',u,'Étage')].filter(Boolean).join(' · '))+'</small>'+(audiences.length?'<small>Public : '+esc(audiences.join(', '))+'</small>':'')+(val('Unites',u,'Précisions sur le public')?'<small>Précisions : '+esc(val('Unites',u,'Précisions sur le public'))+'</small>':'')+(modes.length?'<small>Accueil : '+esc(modes.join(', '))+'</small>':'')+(notices.length?'<small>Orientations : '+esc(notices.join(', '))+'</small>':'')+'</span><span class="saved-actions"><button class="mini-button" data-edit-unit="'+Number(u.id)+'">Modifier</button><button class="mini-button delete" data-delete-unit="'+Number(u.id)+'">Supprimer</button></span></div>';
+    return '<div class="saved-row"><span class="saved-image" id="unit-thumb-'+Number(u.id)+'">'+(img?'⌂':'⌂')+'</span><span class="saved-row-body"><strong>'+esc(recordTitle('Unites',u))+'</strong><small>'+esc([val('Unites',u,'Type de service'),parentLabel,place?recordTitle('Implantations',place):'',val('Unites',u,'Étage')].filter(Boolean).join(' · '))+'</small>'+(audiences.length?'<small>Public : '+esc(audiences.join(', '))+'</small>':'')+(val('Unites',u,'Précisions sur le public')?'<small>Précisions : '+esc(val('Unites',u,'Précisions sur le public'))+'</small>':'')+(modes.length?'<small>Accueil : '+esc(modes.join(', '))+'</small>':'')+(notices.length?'<small>Orientations : '+esc(notices.join(', '))+'</small>':'')+'</span><span class="saved-actions"><button class="mini-button" data-edit-unit="'+Number(u.id)+'">Modifier</button><button class="mini-button delete" data-delete-unit="'+Number(u.id)+'">Supprimer</button></span></div>';
   }
   function listValue(table,row,label){const v=val(table,row,label);return Array.isArray(v)?v.filter(x=>typeof x==='string'):v?String(v).split(',').map(x=>x.trim()).filter(Boolean):[];}
   function wireStepThree(est){
+    const directPole=!est&&Number(state.wizard.poleId)>0;
+    const ownerId=directPole?Number(state.wizard.poleId):Number(est?.id);
     wireMultiSelect('unit-publics');wireMultiSelect('unit-modalities');wireMultiSelect('unit-notifications-list');
     wirePhotoField('unit-photo');
     $('unit-type').onchange=()=>setFoyerFields('unit-type','unit-notifications');
     $('unit-type').addEventListener('change',()=>setOtherTypeField('unit-type','unit-other'));
-    $('unit-form').onsubmit=async e=>{e.preventDefault();if(state.busy)return;state.busy=true;showMessage('Enregistrement de l’unité…');
+    $('unit-form').onsubmit=async e=>{e.preventDefault();if(state.busy)return;state.busy=true;showMessage('Enregistrement de la fiche…');
       try{
-        const type=$('unit-type').value, isF=isFoyer(type);
-        const fields={"Nom de l'unité":$('unit-name').value.trim(),'Type de service':type,'Précision du type (si autre)':$('unit-type-other').value.trim()||null,'Public accueilli par l’unité':['L',...checkedValues('unit-publics')],'Précisions sur le public':$('unit-public-details').value.trim()||null,'Lieu':Number($('unit-place').value),'Étage':$('unit-floor').value.trim()||null,"Modalités d'accueil":['L',...checkedValues('unit-modalities')],'Orientations / notifications (foyers uniquement)':isF?['L',...checkedValues('unit-notifications-list')]:['L']};
+        const type=$('unit-type').value,isF=isFoyer(type);
+        const fields={"Nom de l'unité":$('unit-name').value.trim(),'Type de service':type,'Précision du type (si autre)':$('unit-type-other').value.trim()||null,'Public accueilli par l’unité':['L',...checkedValues('unit-publics')],'Précisions sur le public':$('unit-public-details').value.trim()||null,'Lieu':Number($('unit-place').value)||null,'Étage':$('unit-floor').value.trim()||null,"Modalités d'accueil":['L',...checkedValues('unit-modalities')],'Orientations / notifications (foyers uniquement)':isF?['L',...checkedValues('unit-notifications-list')]:['L'],'Établissement de rattachement (facultatif)':directPole?null:ownerId,'Pôle de rattachement (facultatif)':directPole?ownerId:null};
         if(!fields['Type de service'])throw new Error('Choisissez un type de service.');
         if(type==='Autre / à préciser'&&!fields['Précision du type (si autre)'])throw new Error('Précisez le type de service choisi « Autre ».');
         if(checkedValues('unit-publics').includes('Autre public / à préciser')&&!fields['Précisions sur le public'])throw new Error('Précisez le public choisi « Autre ».');
         await applyPhotoChange(fields,"Photo ou logo de l'unité",'unit-photo');
-        await createRow('Unites',fields);await loadData();showMessage('Unité enregistrée. Vous pouvez en ajouter une autre.','success');
+        await createRow('Unites',fields);await loadData();showMessage('Fiche enregistrée. Vous pouvez en ajouter une autre.','success');
       }catch(err){showMessage(err.message||String(err),'error');}finally{state.busy=false;}
     };
-    $('finish-wizard').onclick=()=>{state.page='card';state.wizard={step:1,establishmentId:est.id,editing:false};render();showMessage('Votre fiche est enregistrée. Vous pouvez la consulter et la modifier.','success');};
+    $('finish-wizard').onclick=()=>{state.page=directPole?'pole':'card';state.wizard={step:1,establishmentId:est?.id||null,poleId:directPole?ownerId:state.wizard.poleId,editing:false};render();showMessage('Les fiches sont enregistrées. Vous pouvez les consulter et les modifier.','success');};
     $('main-panel').querySelectorAll('[data-edit-unit]').forEach(b=>b.onclick=()=>editUnit(Number(b.dataset.editUnit)));
     $('main-panel').querySelectorAll('[data-delete-unit]').forEach(b=>b.onclick=()=>removeUnit(Number(b.dataset.deleteUnit)));
-    unitsFor(est).forEach(u=>{const id=attachmentIds(val('Unites',u,"Photo ou logo de l'unité"))[0];if(id)attachmentUrl(id).then(url=>{const el=$('unit-thumb-'+u.id);if(el&&url)el.innerHTML='<img src="'+esc(url)+'" alt="">';});});
+    units.forEach(u=>{const id=attachmentIds(val('Unites',u,"Photo ou logo de l'unité"))[0];if(id)attachmentUrl(id).then(url=>{const el=$('unit-thumb-'+u.id);if(el&&url)el.innerHTML='<img src="'+esc(url)+'" alt="">';});});
+  }
+  function unitParentKey(unit){
+    const est=readRelation('Unites',unit,'Établissement de rattachement (facultatif)');
+    if(est)return 'est:'+est;
+    const pole=readRelation('Unites',unit,'Pôle de rattachement (facultatif)');
+    if(pole)return 'pole:'+pole;
+    const place=byId('Implantations',readRelation('Unites',unit,'Lieu'));
+    const legacyEst=place?readRelation('Implantations',place,'Établissement de rattachement'):null;
+    return legacyEst?'est:'+legacyEst:'';
+  }
+  function unitParentOptions(selected=''){
+    const est=rows('Etablissements').map(e=>'<option value="est:'+Number(e.id)+'" '+(selected==='est:'+Number(e.id)?'selected':'')+'>Établissement — '+esc(recordTitle('Etablissements',e))+'</option>').join('');
+    const pole=rows('Poles').map(p=>'<option value="pole:'+Number(p.id)+'" '+(selected==='pole:'+Number(p.id)?'selected':'')+'>Pôle — '+esc(recordTitle('Poles',p))+'</option>').join('');
+    return est+pole;
+  }
+  function unitParentLabel(unit){
+    const key=unitParentKey(unit);if(!key)return 'Rattachement à choisir';
+    const [kind,id]=key.split(':');return kind==='pole'?recordTitle('Poles',byId('Poles',Number(id))):recordTitle('Etablissements',byId('Etablissements',Number(id)));
+  }
+  function placesForParent(key){
+    const [kind,idText]=String(key||'').split(':'),id=Number(idText)||null;
+    if(kind==='est')return placesFor(byId('Etablissements',id));
+    if(kind==='pole')return placesForPole(id);
+    return [];
+  }
+  function placeOptions(places,selected=null){
+    return '<option value="">Aucun lieu pour le moment</option>'+places.map(p=>'<option value="'+Number(p.id)+'" '+(Number(selected)===Number(p.id)?'selected':'')+'>'+esc(recordTitle('Implantations',p))+'</option>').join('');
+  }
+  function openPoleCard(id){state.wizard.poleId=Number(id);state.page='pole';render();}
+  function renderPoleCard(){
+    const pole=byId('Poles',state.wizard.poleId);
+    if(!pole){state.page='home';return renderHome();}
+    const admin=byId('Etablissements',readRelation('Poles',pole,'Établissement administratif'));
+    let members=establishmentsForPole(pole.id);
+    if(admin&&!members.some(e=>Number(e.id)===Number(admin.id)))members=[admin,...members];
+    const direct=unitsForPole(pole.id);
+    setHeader('Fiche du pôle','Le pôle est enregistré une fois. Vous pouvez lui rattacher plusieurs établissements et plusieurs services.');
+    $('main-panel').innerHTML='<div class="toolbar"><button class="button quiet small" id="back-poles">← Retour aux structures</button><div class="toolbar-actions"><button class="button secondary" id="edit-pole-card">Modifier le pôle</button><button class="button primary" id="add-est-to-pole">＋ Ajouter un établissement</button><button class="button primary" id="add-unit-to-pole">＋ Ajouter un service / unité</button></div></div>'+ 
+      '<div class="section-panel"><div class="section-heading"><div class="section-title"><span class="section-icon">P</span><div><h3>'+esc(recordTitle('Poles',pole))+'</h3><p>Administration située dans : '+esc(admin?recordTitle('Etablissements',admin):'Non renseigné')+'</p></div></div><button class="mini-button delete" id="delete-pole-card">Supprimer le pôle</button></div><p class="association-note">Vous pouvez rattacher plusieurs établissements au pôle. Les fiches de service ou d’unité peuvent aussi être rattachées directement au pôle.</p></div>'+ 
+      '<section class="section-panel"><div class="section-heading"><div class="section-title"><span class="section-icon">É</span><div><h3>Établissements rattachés</h3><p>'+members.length+' établissement(s)</p></div></div></div><div class="establishment-list">'+(members.length?members.map(e=>'<button class="est-card-button" data-open-est="'+Number(e.id)+'"><span class="est-thumb">⌂</span><span><strong>'+esc(recordTitle('Etablissements',e))+'</strong><small>'+esc(Number(e.id)===Number(admin?.id)?'Établissement administratif'+(readRelation('Etablissements',e,'Pôle de rattachement (facultatif)')===Number(pole.id)?' · rattaché au pôle':''):'Établissement rattaché au pôle')+'</small></span></button>').join(''):'<div class="empty-state">Aucun établissement rattaché. Vous pouvez en ajouter un.</div>')+'</div></section>'+ 
+      '<section class="section-panel"><div class="section-heading"><div class="section-title"><span class="section-icon">♟</span><div><h3>Services, foyers et unités rattachés directement au pôle</h3><p>'+direct.length+' fiche(s)</p></div></div></div><div class="unit-grid">'+(direct.length?direct.map(unitCard).join(''):'<div class="empty-state">Aucun service ou unité directement rattaché à ce pôle.</div>')+'</div></section>';
+    $('back-poles').onclick=()=>{state.page='home';render();};
+    $('edit-pole-card').onclick=()=>editPole(pole.id);
+    $('delete-pole-card').onclick=()=>removePole(pole.id);
+    $('add-est-to-pole').onclick=()=>startWizard(null,false,1,pole.id);
+    $('add-unit-to-pole').onclick=()=>startWizard(null,false,3,pole.id);
+    $('main-panel').querySelectorAll('[data-open-est]').forEach(b=>b.onclick=()=>{state.wizard.establishmentId=Number(b.dataset.openEst);state.page='card';render();});
+    $('main-panel').querySelectorAll('[data-edit-unit]').forEach(b=>b.onclick=()=>editUnit(Number(b.dataset.editUnit)));
+    $('main-panel').querySelectorAll('[data-delete-unit]').forEach(b=>b.onclick=()=>removeUnit(Number(b.dataset.deleteUnit)));
+    direct.forEach(u=>{const id=attachmentIds(val('Unites',u,"Photo ou logo de l'unité"))[0];if(id)attachmentUrl(id).then(url=>{const el=$('unit-view-'+u.id);if(el&&url)el.innerHTML='<img src="'+esc(url)+'" alt="">';});});
   }
   function renderCard(){
     const est=byId('Etablissements',state.wizard.establishmentId);if(!est){state.page='home';return renderHome();}
@@ -367,15 +443,16 @@
     const mainPhoto=attachmentIds(val('Etablissements',est,"Logo ou photo de l’établissement"))[0];
     const poleLogo=attachmentIds(val('Poles',pole,'Logo du pôle'))[0];
     const communes=[...new Set(places.map(p=>addressTown(val('Implantations',p,'Adresse complète'))).filter(Boolean))].join(', ');
-    $('main-panel').innerHTML='<div class="toolbar"><button class="button quiet small" id="back-home">← Toutes les fiches</button><span></span></div>'+
+    $('main-panel').innerHTML='<div class="toolbar"><div class="toolbar-actions"><button class="button quiet small" id="back-home">← Toutes les fiches</button>'+(pole?'<button class="button secondary small" id="back-pole">← Retour au pôle</button>':'')+'</div><span></span></div>'+
       '<div class="identity-card"><div class="identity-photo" id="est-photo-view">'+(mainPhoto?'⌂':'⌂')+'</div><div class="identity-content"><span class="saved-label">✓ Fiche enregistrée</span><h2>'+esc(recordTitle('Etablissements',est))+'</h2><div class="identity-meta">'+(val('Etablissements',est,'Public de l’établissement')?'<span><b>Public de l’établissement</b><span>'+esc(val('Etablissements',est,'Public de l’établissement'))+'</span></span>':'')+(pole?'<span><b>Pôle</b><span class="pole-meta"><span>'+esc(recordTitle('Poles',pole))+'</span>'+(poleLogo?'<img class="pole-inline-logo" id="pole-logo-view" alt="Logo du pôle">':'')+'</span></span>':'')+(communes?'<span><b>Commune</b><span>'+esc(communes)+'</span></span>':'')+'<span><b>Adresse administrative</b><span>'+esc(val('Etablissements',est,'Adresse administrative')||'Non renseignée')+'</span></span></div></div><div class="card-actions"><button class="button primary" id="edit-est">✎ Modifier la fiche</button><button class="mini-button delete" id="delete-est">Supprimer</button></div></div>'+
       '<section class="section-panel"><div class="section-heading"><div class="section-title"><span class="section-icon">⌖</span><div><h3>Lieux associés</h3><p>'+places.length+' lieu(x) enregistré(s)</p></div></div><button class="button primary" id="add-place">＋ Ajouter un lieu</button></div><div class="location-grid">'+(places.length?places.map((p,i)=>locationCard(p,i)).join(''):'<div class="empty-state">Aucun lieu enregistré.</div>')+'</div></section>'+
       '<section class="section-panel"><div class="section-heading"><div class="section-title"><span class="section-icon">♟</span><div><h3>Unités / services de l’établissement</h3><p>'+units.length+' unité(s) ou service(s) enregistré(s)</p></div></div><button class="button primary" id="add-unit">＋ Ajouter une unité / service</button></div><div class="unit-grid">'+(units.length?units.map(unitCard).join(''):'<div class="empty-state">Aucune unité ou service enregistré.</div>')+'</div><div class="association-note">Les informations et la charte de l’association sont communes. Elles ne se ressaisissent pas sur chaque fiche.</div></section>';
     $('back-home').onclick=()=>{state.page='home';render();};
+    $('back-pole')?.addEventListener('click',()=>openPoleCard(pole.id));
     $('edit-est').onclick=()=>startWizard(est.id,true,1);
     $('delete-est').onclick=()=>removeEstablishment(est);
     $('add-place').onclick=()=>startWizard(est.id,false,2);
-    $('add-unit').onclick=()=>places.length?startWizard(est.id,false,3):(showMessage('Ajoutez d’abord un lieu pour rattacher l’unité.','error'),startWizard(est.id,false,2));
+    $('add-unit').onclick=()=>startWizard(est.id,false,3);
     $('main-panel').querySelectorAll('[data-edit-place]').forEach(b=>b.onclick=()=>editPlace(Number(b.dataset.editPlace)));
     $('main-panel').querySelectorAll('[data-delete-place]').forEach(b=>b.onclick=()=>removePlace(Number(b.dataset.deletePlace)));
     $('main-panel').querySelectorAll('[data-edit-unit]').forEach(b=>b.onclick=()=>editUnit(Number(b.dataset.editUnit)));
@@ -394,9 +471,9 @@
     return '<article class="location-card"><div class="location-photo" id="place-view-'+id+'">⌖</div><div class="location-details"><span class="place-tag">'+(i===0?'Lieu principal':'Site associé')+'</span><strong>'+esc(recordTitle('Implantations',p))+'</strong><p><b>Adresse</b><br>'+esc(val('Implantations',p,'Adresse complète')||'Adresse non renseignée')+(val('Implantations',p,'Étage(s)')?'<br><b>Étage</b><br>'+esc(val('Implantations',p,'Étage(s)')):'')+'</p></div><div class="saved-actions"><button class="mini-button" data-edit-place="'+id+'">Modifier</button><button class="mini-button delete" data-delete-place="'+id+'">×</button></div></article>';
   }
   function unitCard(u){
-    const id=Number(u.id),place=byId('Implantations',readRelation('Unites',u,'Lieu'));
+    const id=Number(u.id),place=byId('Implantations',readRelation('Unites',u,'Lieu')),parentLabel=unitParentLabel(u);
     const audiences=listValue('Unites',u,'Public accueilli par l’unité'),modes=listValue('Unites',u,"Modalités d'accueil"),notices=listValue('Unites',u,'Orientations / notifications (foyers uniquement)');
-    return '<article class="unit-card"><div class="unit-photo" id="unit-view-'+id+'">♟</div><div class="unit-details"><strong>'+esc(recordTitle('Unites',u))+'</strong><p>'+esc([val('Unites',u,'Type de service'),place?recordTitle('Implantations',place):'',val('Unites',u,'Étage')].filter(Boolean).join(' · '))+'</p>'+(audiences.length?'<small>Public : '+esc(audiences.join(', '))+'</small>':'')+(val('Unites',u,'Précisions sur le public')?'<small>Précisions : '+esc(val('Unites',u,'Précisions sur le public'))+'</small>':'')+(modes.length?'<small>Accueil : '+esc(modes.join(', '))+'</small>':'')+(notices.length?'<small>Orientations : '+esc(notices.join(', '))+'</small>':'')+'</div><div class="saved-actions"><button class="mini-button" data-edit-unit="'+id+'">Modifier</button><button class="mini-button delete" data-delete-unit="'+id+'">×</button></div></article>';
+    return '<article class="unit-card"><div class="unit-photo" id="unit-view-'+id+'">♟</div><div class="unit-details"><strong>'+esc(recordTitle('Unites',u))+'</strong><p>'+esc([val('Unites',u,'Type de service'),parentLabel,place?recordTitle('Implantations',place):'',val('Unites',u,'Étage')].filter(Boolean).join(' · '))+'</p>'+(audiences.length?'<small>Public : '+esc(audiences.join(', '))+'</small>':'')+(val('Unites',u,'Précisions sur le public')?'<small>Précisions : '+esc(val('Unites',u,'Précisions sur le public'))+'</small>':'')+(modes.length?'<small>Accueil : '+esc(modes.join(', '))+'</small>':'')+(notices.length?'<small>Orientations : '+esc(notices.join(', '))+'</small>':'')+'</div><div class="saved-actions"><button class="mini-button" data-edit-unit="'+id+'">Modifier</button><button class="mini-button delete" data-delete-unit="'+id+'">×</button></div></article>';
   }
   function modal(title,body){
     const d=$('edit-dialog');d.innerHTML='<div class="dialog-head"><h2>'+esc(title)+'</h2><button type="button" class="mini-button" id="close-dialog">Fermer</button></div><div class="dialog-body">'+body+'</div>';d.showModal();$('close-dialog').onclick=()=>d.close();return d;
@@ -411,13 +488,22 @@
   function editUnit(id){
     const u=byId('Unites',id);if(!u)return;const photo=attachmentIds(val('Unites',u,"Photo ou logo de l'unité"))[0];
     const currentType=String(val('Unites',u,'Type de service')||''), audiences=listValue('Unites',u,'Public accueilli par l’unité'), modes=listValue('Unites',u,"Modalités d'accueil"), notices=listValue('Unites',u,'Orientations / notifications (foyers uniquement)');
-    const otherValue=val('Unites',u,'Précision du type (si autre)')||'';
-    const d=modal('Modifier l’unité','<form id="edit-unit-form"><div class="field-grid">'+inputField('eu-name',"Nom de l'unité",val('Unites',u,"Nom de l'unité")||'',{required:true})+selectField('eu-type','Type de service ou d’unité',serviceTypeOptions(currentType),currentType,true,'Choisissez le service réellement porté par cette unité.')+'<div id="eu-other" class="wide '+(currentType.startsWith('Autre')?'':'hidden')+'">'+inputField('eu-type-other','Précision du type (si « Autre »)',otherValue,{placeholder:'À préciser'})+'</div>'+selectField('eu-place','Lieu',placesFor(byId('Etablissements',state.wizard.establishmentId)).map(p=>'<option value="'+Number(p.id)+'" '+(Number(p.id)===readRelation('Unites',u,'Lieu')?'selected':'')+'>'+esc(recordTitle('Implantations',p))+'</option>').join(''),readRelation('Unites',u,'Lieu'),true)+inputField('eu-floor','Étage de l’unité',val('Unites',u,'Étage')||'')+photoField('eu-photo','Photo ou logo',photo)+publicProfileField('eu-publics',audiences)+'<details class="extra-section wide" open><summary>Informations complémentaires (facultatif)</summary><div class="extra-content">'+inputField('eu-public-details','Précisions sur le public',val('Unites',u,'Précisions sur le public')||'',{textarea:true,placeholder:'Précisez les besoins ou particularités propres à cette unité.',wide:true})+multiSelectField('eu-modalities',"Modalités d’accueil",MODALITIES,modes)+ '<div id="eu-notifications" class="'+(isFoyer(currentType)?'':'hidden')+'">'+multiSelectField('eu-notifications-list','Orientations / notifications accueillies (foyers uniquement)',FOYER_NOTIFICATIONS,notices,'À renseigner seulement pour un foyer.')+'</div></div></details></div><div class="dialog-actions"><button class="button primary">Enregistrer</button><button class="button quiet" type="button" id="cancel-edit">Annuler</button></div></form>');
-    wireMultiSelect('eu-publics');wireMultiSelect('eu-modalities');wireMultiSelect('eu-notifications-list');
-    $('cancel-edit').onclick=()=>d.close();wirePhotoField('eu-photo',photo);
-    $('eu-type').onchange=()=>setFoyerFields('eu-type','eu-notifications');
-    $('eu-type').addEventListener('change',()=>setOtherTypeField('eu-type','eu-other'));
-    $('edit-unit-form').onsubmit=async e=>{e.preventDefault();try{const type=$('eu-type').value,isF=isFoyer(type),f={"Nom de l'unité":$('eu-name').value.trim(),'Type de service':type,'Précision du type (si autre)':$('eu-type-other').value.trim()||null,'Public accueilli par l’unité':['L',...checkedValues('eu-publics')],'Précisions sur le public':$('eu-public-details').value.trim()||null,'Lieu':Number($('eu-place').value),'Étage':$('eu-floor').value.trim()||null,"Modalités d'accueil":['L',...checkedValues('eu-modalities')],'Orientations / notifications (foyers uniquement)':isF?['L',...checkedValues('eu-notifications-list')]:['L']};if(type==='Autre / à préciser'&&!f['Précision du type (si autre)'])throw new Error('Précisez le type de service choisi « Autre ».');if(checkedValues('eu-publics').includes('Autre public / à préciser')&&!f['Précisions sur le public'])throw new Error('Précisez le public choisi « Autre ».');await applyPhotoChange(f,"Photo ou logo de l'unité",'eu-photo',photo);await updateRow('Unites',id,f);d.close();await loadData();showMessage('Unité modifiée.','success');}catch(err){showMessage(err.message||String(err),'error');}};
+    const parentKey=unitParentKey(u),currentPlace=readRelation('Unites',u,'Lieu'),otherValue=val('Unites',u,'Précision du type (si autre)')||'';
+    const places=placesForParent(parentKey);
+    const body='<form id="edit-unit-form"><div class="field-grid">'+inputField('eu-name',"Nom du service, foyer ou unité",val('Unites',u,"Nom de l'unité")||'',{required:true})+selectField('eu-type','Type de service ou d’unité',serviceTypeOptions(currentType),currentType,true)+ '<div id="eu-other" class="wide '+(currentType.startsWith('Autre')?'':'hidden')+'">'+inputField('eu-type-other','Précision du type (si « Autre »)',otherValue,{placeholder:'À préciser'})+'</div>'+selectField('eu-parent','Rattaché à',unitParentOptions(parentKey),parentKey,true,'Choisissez le pôle ou l’établissement auquel cette fiche appartient.')+selectField('eu-place','Lieu (facultatif)',placeOptions(places,currentPlace),currentPlace,false,'Vous pouvez choisir un lieu ou laisser ce champ vide.')+inputField('eu-floor','Étage (facultatif)',val('Unites',u,'Étage')||'')+photoField('eu-photo','Photo ou logo (facultatif)',photo)+publicProfileField('eu-publics',audiences)+'<details class="extra-section wide" open><summary>Autres informations (facultatif)</summary><div class="extra-content">'+inputField('eu-public-details','Précisions sur le public',val('Unites',u,'Précisions sur le public')||'',{textarea:true,placeholder:'À compléter si nécessaire.',wide:true})+multiSelectField('eu-modalities',"Modalités d’accueil",MODALITIES,modes)+ '<div id="eu-notifications" class="'+(isFoyer(currentType)?'':'hidden')+'">'+multiSelectField('eu-notifications-list','Orientations / notifications (foyers uniquement)',FOYER_NOTIFICATIONS,notices,'À renseigner seulement pour un foyer.')+'</div></div></details></div><div class="dialog-actions"><button class="button primary">Enregistrer</button><button class="button quiet" type="button" id="cancel-edit">Annuler</button></div></form>';
+    const d=modal('Modifier la fiche',body);
+    wireMultiSelect('eu-publics');wireMultiSelect('eu-modalities');wireMultiSelect('eu-notifications-list');wirePhotoField('eu-photo',photo);
+    $('cancel-edit').onclick=()=>d.close();
+    $('eu-parent').onchange=()=>{const old=Number($('eu-place').value)||null;const list=placesForParent($('eu-parent').value);$('eu-place').innerHTML=placeOptions(list,list.some(p=>Number(p.id)===old)?old:null);};
+    $('eu-type').onchange=()=>setFoyerFields('eu-type','eu-notifications');$('eu-type').addEventListener('change',()=>setOtherTypeField('eu-type','eu-other'));
+    $('edit-unit-form').onsubmit=async e=>{e.preventDefault();try{
+      const type=$('eu-type').value,isF=isFoyer(type),parts=String($('eu-parent').value||'').split(':'),kind=parts[0],parentId=Number(parts[1])||null;
+      if(!parentId||!['est','pole'].includes(kind))throw new Error('Choisissez un pôle ou un établissement.');
+      const f={"Nom de l'unité":$('eu-name').value.trim(),'Type de service':type,'Précision du type (si autre)':$('eu-type-other').value.trim()||null,'Public accueilli par l’unité':['L',...checkedValues('eu-publics')],'Précisions sur le public':$('eu-public-details').value.trim()||null,'Lieu':Number($('eu-place').value)||null,'Étage':$('eu-floor').value.trim()||null,"Modalités d'accueil":['L',...checkedValues('eu-modalities')],'Orientations / notifications (foyers uniquement)':isF?['L',...checkedValues('eu-notifications-list')]:['L'],'Établissement de rattachement (facultatif)':kind==='est'?parentId:null,'Pôle de rattachement (facultatif)':kind==='pole'?parentId:null};
+      if(type==='Autre / à préciser'&&!f['Précision du type (si autre)'])throw new Error('Précisez le type de service choisi « Autre ».');
+      if(checkedValues('eu-publics').includes('Autre public / à préciser')&&!f['Précisions sur le public'])throw new Error('Précisez le public choisi « Autre ».');
+      await applyPhotoChange(f,"Photo ou logo de l'unité",'eu-photo',photo);await updateRow('Unites',id,f);d.close();await loadData();showMessage('Fiche modifiée.','success');
+    }catch(err){showMessage(err.message||String(err),'error');}};
   }
   async function removeUnit(id){
     const unit=byId('Unites',id);if(!unit)return;
@@ -427,16 +513,28 @@
   async function removePlace(id){
     const place=byId('Implantations',id);if(!place)return;
     const children=rows('Unites').filter(u=>readRelation('Unites',u,'Lieu')===id);
-    const msg=children.length?'Supprimer le lieu « '+recordTitle('Implantations',place)+' » et ses '+children.length+' unité(s) / service(s) ?':'Supprimer définitivement le lieu « '+recordTitle('Implantations',place)+' » ?';
+    const msg=children.length?'Supprimer le lieu « '+recordTitle('Implantations',place)+' » ? Les '+children.length+' services / unités seront conservés, mais leur lieu sera retiré.':'Supprimer définitivement le lieu « '+recordTitle('Implantations',place)+' » ?';
     if(!confirm(msg))return;
-    try{for(const u of children)await deleteRow('Unites',u.id);await deleteRow('Implantations',id);await loadData();showMessage('Lieu et éléments associés supprimés.','success');}catch(err){showMessage('La suppression n’a pas pu être terminée. Rechargez les données et vérifiez les liens. '+(err.message||String(err)),'error');}
+    try{
+      const estId=readRelation('Implantations',place,'Établissement de rattachement');
+      for(const u of children){
+        const parentEst=readRelation('Unites',u,'Établissement de rattachement (facultatif)'),parentPole=readRelation('Unites',u,'Pôle de rattachement (facultatif)');
+        const update={'Lieu':null};if(!parentEst&&!parentPole&&estId)update['Établissement de rattachement (facultatif)']=estId;
+        await updateRow('Unites',u.id,update);
+      }
+      await deleteRow('Implantations',id);await loadData();showMessage('Lieu supprimé. Les fiches de service et d’unité ont été conservées.','success');
+    }catch(err){showMessage('La suppression n’a pas pu être terminée. Rechargez les données et vérifiez les liens. '+(err.message||String(err)),'error');}
   }
   async function removeEstablishment(est){
     const places=placesFor(est),children=unitsFor(est);
     const poles=rows('Poles').filter(p=>readRelation('Poles',p,'Établissement administratif')===Number(est.id));
     if(poles.length){showMessage('Suppression impossible pour le moment : cet établissement héberge l’administration du pôle « '+recordTitle('Poles',poles[0])+' ». Dans « Gérer les pôles », modifiez ce pôle et choisissez un autre établissement administratif, ou supprimez d’abord le pôle.','error');return;}
     if(!confirm('Supprimer « '+recordTitle('Etablissements',est)+' », ses '+places.length+' lieu(x) et ses '+children.length+' unité(s) / service(s) ? Les unités et les lieux associés seront également supprimés.'))return;
-    try{for(const u of children)await deleteRow('Unites',u.id);for(const p of places)await deleteRow('Implantations',p.id);await deleteRow('Etablissements',est.id);state.page='home';await loadData();showMessage('Fiche et éléments associés supprimés.','success');}catch(err){showMessage(err.message||String(err),'error');}
+    try{
+      const placeIds=new Set(places.map(p=>Number(p.id)));
+      const poleChildren=rows('Unites').filter(u=>placeIds.has(readRelation('Unites',u,'Lieu'))&&readRelation('Unites',u,'Pôle de rattachement (facultatif)'));
+      for(const u of poleChildren)await updateRow('Unites',u.id,{'Lieu':null});
+      for(const u of children)await deleteRow('Unites',u.id);for(const p of places)await deleteRow('Implantations',p.id);await deleteRow('Etablissements',est.id);state.page='home';await loadData();showMessage('Établissement supprimé. Les services rattachés directement à un pôle ont été conservés sans leur ancien lieu.','success');}catch(err){showMessage(err.message||String(err),'error');}
   }
   function openCharterEditor(){
     const a=rows('Association')[0]||null;
@@ -454,29 +552,36 @@
   function openPoleManager(){
     const establishments=rows('Etablissements');
     if(!establishments.length){showMessage('Créez d’abord au moins un établissement. Vous pourrez ensuite créer son pôle administratif.','error');return;}
-    const list=rows('Poles').map(p=>'<div class="saved-row"><span class="pole-manager-logo" id="pole-logo-thumb-'+Number(p.id)+'">◉</span><span class="saved-row-body"><strong>'+esc(recordTitle('Poles',p))+'</strong><small>Administration : '+esc(recordTitle('Etablissements',byId('Etablissements',readRelation('Poles',p,'Établissement administratif'))) )+'</small></span><span class="saved-actions"><button class="mini-button" data-edit-pole="'+Number(p.id)+'">Modifier</button><button class="mini-button delete" data-delete-pole="'+Number(p.id)+'">×</button></span></div>').join('');
-    const body=(list?'<div class="saved-list">'+list+'</div>':'<p>Aucun pôle enregistré.</p>')+'<form id="pole-form"><div class="field-grid">'+inputField('pole-name','Nom du pôle','',{required:true,placeholder:'Ex. Pôle adultes'})+selectField('pole-admin','Établissement où se trouve l’administration',refOptions('Etablissements'),'',true)+photoField('pole-logo-new','Logo du pôle')+'</div><div class="dialog-actions"><button class="button primary">＋ Ajouter le pôle</button></div></form><p class="field-help">Pour rattacher un établissement à ce pôle, modifiez sa fiche et choisissez le pôle.</p>';
+    const list=rows('Poles').map(p=>'<div class="saved-row"><span class="pole-manager-logo" id="pole-logo-thumb-'+Number(p.id)+'">◉</span><span class="saved-row-body"><strong>'+esc(recordTitle('Poles',p))+'</strong><small>Administration : '+esc(recordTitle('Etablissements',byId('Etablissements',readRelation('Poles',p,'Établissement administratif'))) )+' · '+establishmentsForPole(p.id).length+' établissement(s) rattaché(s) · '+unitsForPole(p.id).length+' service(s) direct(s)</small></span><span class="saved-actions"><button class="mini-button" data-open-pole="'+Number(p.id)+'">Ouvrir</button><button class="mini-button" data-edit-pole="'+Number(p.id)+'">Modifier</button><button class="mini-button delete" data-delete-pole="'+Number(p.id)+'">Supprimer</button></span></div>').join('');
+    const body=(list?'<div class="saved-list">'+list+'</div>':'<p>Aucun pôle enregistré.</p>')+'<form id="pole-form"><div class="field-grid">'+inputField('pole-name','Nom du pôle','',{required:true,placeholder:'Ex. Pôle adultes'})+selectField('pole-admin','Établissement où se trouve l’administration',refOptions('Etablissements'),'',true)+photoField('pole-logo-new','Logo du pôle')+'</div><div class="dialog-actions"><button class="button primary">＋ Ajouter le pôle</button></div></form><p class="field-help">Ouvrez un pôle pour lui ajouter plusieurs établissements et des services / unités.</p>';
     const d=modal('Gérer les pôles',body);
     rows('Poles').forEach(p=>{const id=attachmentIds(val('Poles',p,'Logo du pôle'))[0];if(id)attachmentUrl(id).then(url=>{const el=$('pole-logo-thumb-'+p.id);if(el&&url)el.innerHTML='<img src="'+esc(url)+'" alt="">';});});
     wirePhotoField('pole-logo-new');
     $('pole-form').onsubmit=async e=>{e.preventDefault();try{const f={'Nom du pôle':$('pole-name').value.trim(),'Établissement administratif':Number($('pole-admin').value)};await applyPhotoChange(f,'Logo du pôle','pole-logo-new');await createRow('Poles',f);d.close();await loadData();showMessage('Pôle enregistré.','success');}catch(err){showMessage(err.message||String(err),'error');}};
+    d.querySelectorAll('[data-open-pole]').forEach(b=>b.onclick=()=>{const id=Number(b.dataset.openPole);d.close();openPoleCard(id);});
     d.querySelectorAll('[data-edit-pole]').forEach(b=>b.onclick=()=>{const id=Number(b.dataset.editPole);d.close();editPole(id);});
     d.querySelectorAll('[data-delete-pole]').forEach(b=>b.onclick=()=>{const id=Number(b.dataset.deletePole);d.close();removePole(id);});
   }
   function editPole(id){
+    const returnToPole=state.page==='pole';
     const p=byId('Poles',id);if(!p)return;
     const logo=attachmentIds(val('Poles',p,'Logo du pôle'))[0];
     const d=modal('Modifier le pôle','<form id="edit-pole-form"><div class="field-grid">'+inputField('p-name','Nom du pôle',recordTitle('Poles',p),{required:true})+selectField('p-admin','Établissement où se trouve l’administration',refOptions('Etablissements',readRelation('Poles',p,'Établissement administratif')),readRelation('Poles',p,'Établissement administratif'),true)+photoField('p-logo','Logo du pôle',logo)+'</div><div class="dialog-actions"><button class="button primary">Enregistrer</button></div></form>');
     wirePhotoField('p-logo',logo);
-    $('edit-pole-form').onsubmit=async e=>{e.preventDefault();try{const f={'Nom du pôle':$('p-name').value.trim(),'Établissement administratif':Number($('p-admin').value)};await applyPhotoChange(f,'Logo du pôle','p-logo',logo);await updateRow('Poles',id,f);d.close();await loadData();openPoleManager();}catch(err){showMessage(err.message||String(err),'error');}};
+    $('edit-pole-form').onsubmit=async e=>{e.preventDefault();try{const f={'Nom du pôle':$('p-name').value.trim(),'Établissement administratif':Number($('p-admin').value)};await applyPhotoChange(f,'Logo du pôle','p-logo',logo);await updateRow('Poles',id,f);d.close();await loadData();if(returnToPole)openPoleCard(id);else openPoleManager();}catch(err){showMessage(err.message||String(err),'error');}};
   }
   async function removePole(id){
     const pole=byId('Poles',id);if(!pole)return;
-    const linked=rows('Etablissements').filter(e=>readRelation('Etablissements',e,'Pôle de rattachement (facultatif)')===Number(id));
-    const impact=linked.length?' '+linked.length+' établissement(s) seront conservés et leur pôle sera retiré.':'';
-    if(!confirm('Supprimer le pôle « '+recordTitle('Poles',pole)+' » ?'+impact))return;
-    try{for(const e of linked)await updateRow('Etablissements',e.id,{'Pôle de rattachement (facultatif)':null});await deleteRow('Poles',id);await loadData();openPoleManager();showMessage('Pôle supprimé. Les établissements liés ont été conservés.','success');}catch(err){showMessage('La suppression du pôle n’a pas pu être terminée. Rechargez les données et vérifiez les liens. '+(err.message||String(err)),'error');}
+    const linked=establishmentsForPole(id),direct=unitsForPole(id),adminId=readRelation('Poles',pole,'Établissement administratif');
+    const msg='Supprimer le pôle « '+recordTitle('Poles',pole)+' » ? '+linked.length+' établissement(s) seront conservés sans rattachement au pôle. '+direct.length+' service(s) / unité(s) direct(s) seront conservés et rattachés à leur lieu, ou à l’établissement administratif si aucun lieu n’est indiqué.';
+    if(!confirm(msg))return;
+    try{
+      for(const e of linked)await updateRow('Etablissements',e.id,{'Pôle de rattachement (facultatif)':null});
+      for(const u of direct){const place=byId('Implantations',readRelation('Unites',u,'Lieu')),siteEst=place?readRelation('Implantations',place,'Établissement de rattachement'):null;await updateRow('Unites',u.id,{'Pôle de rattachement (facultatif)':null,'Établissement de rattachement (facultatif)':siteEst||adminId||null});}
+      await deleteRow('Poles',id);const fromPole=state.page==='pole';state.page='home';await loadData();if(!fromPole)openPoleManager();showMessage('Pôle supprimé. Ses fiches ont été conservées et rattachées à un établissement.','success');
+    }catch(err){showMessage('La suppression du pôle n’a pas pu être terminée. Rechargez les données et vérifiez les liens. '+(err.message||String(err)),'error');}
   }
+
 
   $('brand').onclick=e=>{e.preventDefault();state.page='home';render();};
   if(!window.grist){setConnection('Aperçu hors Grist',false);$('main-panel').innerHTML='<div class="empty-state"><h2>Ouvrez ce widget depuis Grist</h2><p>Ce formulaire écrit directement dans les tables du document.</p></div>';return;}
