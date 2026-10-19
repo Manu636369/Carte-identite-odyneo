@@ -4,10 +4,9 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#173d64">
-  <title>Carte d’identité des établissements</title>
+  <title>Carte d’identité de la structure</title>
   <link rel="stylesheet" href="./style.css">
   <script>
-    // Dans Grist, charge l’API de l’instance qui héberge le document.
     (function () {
       let origin = 'https://docs.getgrist.com';
       try { if (document.referrer) origin = new URL(document.referrer).origin; } catch (_) {}
@@ -18,21 +17,12 @@
 <body>
   <main class="app">
     <header class="topbar">
-      <div id="brand" class="brand" aria-hidden="true">O</div>
-      <div class="heading"><h1>Carte d’identité des établissements</h1><p>Les informations se saisissent une fois, puis les lieux et les unités se rattachent à l’établissement.</p></div>
-      <button id="edit-charter" class="button charter-button">Charte commune</button>
-      <div id="connection" class="connection">Connexion à Grist…</div>
+      <a class="brand" id="brand" href="#" aria-label="Accueil">O</a>
+      <div class="heading"><h1 id="page-title">Carte d’identité de la structure</h1><p id="page-subtitle">Les informations se saisissent une fois. Les lieux et les unités sont ensuite rattachés à l’établissement.</p></div>
+      <span id="connection" class="connection">Connexion à Grist…</span>
     </header>
     <div id="message" class="message hidden" role="status" aria-live="polite"></div>
-    <div class="workspace">
-      <aside class="sidebar">
-        <div class="side-heading"><div><h2>Établissements</h2><small><span id="list-count">0</span> fiche(s)</small></div><button id="new-establishment" class="button primary small">＋ Créer une fiche</button></div>
-        <label class="search-label" for="search">Rechercher un établissement</label>
-        <input id="search" class="search" type="search" placeholder="Saisis un nom…">
-        <div id="establishment-list" class="establishment-list"><div class="empty-list">Chargement…</div></div>
-      </aside>
-      <section id="main-panel" class="main-panel" aria-live="polite"><div class="welcome"><h2>Connexion à Grist…</h2></div></section>
-    </div>
+    <section id="main-panel" class="main-panel" aria-live="polite"></section>
   </main>
   <dialog id="edit-dialog" class="edit-dialog"></dialog>
   <script src="./script.js" defer></script>
