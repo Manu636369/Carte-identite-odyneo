@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#173d64">
-  <title>Carte d’identité de la structure</title>
+  <title>Carte d’identité des établissements</title>
   <link rel="stylesheet" href="./style.css">
   <script>
     (function () {
@@ -17,14 +17,18 @@
 <body>
   <main class="app">
     <header class="topbar">
-      <a class="brand" id="brand" href="#" aria-label="Accueil">O</a>
-      <div class="heading"><h1 id="page-title">Carte d’identité de la structure</h1><p id="page-subtitle">Saisissez une fois les informations communes. Rattachez ensuite plusieurs fiches à un pôle ou à un établissement.</p></div>
+      <div id="brand" class="brand" aria-label="Logo de l’association">O</div>
+      <div class="heading">
+        <p class="eyebrow">ANNUAIRE DES STRUCTURES</p>
+        <h1 id="page-title">Carte d’identité des établissements</h1>
+        <p id="page-subtitle">Une fiche établissement, puis ses services et unités.</p>
+      </div>
       <span id="connection" class="connection">Connexion à Grist…</span>
     </header>
     <div id="message" class="message hidden" role="status" aria-live="polite"></div>
     <section id="main-panel" class="main-panel" aria-live="polite"></section>
+    <footer class="footer">Les fiches sont enregistrées dans Grist. Les photos et logos sont facultatifs.</footer>
   </main>
-  <dialog id="edit-dialog" class="edit-dialog"></dialog>
   <script src="./script.js" defer></script>
 </body>
 </html>
