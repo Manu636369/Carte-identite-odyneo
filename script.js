@@ -123,7 +123,10 @@
       if (candidates.length === 1) state.tableIds[table] = candidates[0];
     }
     const missing = TABLES.filter(table => !state.tableIds[table]);
-    if (missing.length) throw new Error('Tables absentes : ' + missing.join(', ') + '. Importe le nouveau classeur dans Grist.');
+    if (missing.length) {
+      const found = available.length ? available.join(', ') : 'aucune';
+      throw new Error('Version SANS PÔLE : le widget attend les tables ' + TABLES.join(', ') + '. Table(s) manquante(s) : ' + missing.join(', ') + '. Tables détectées dans Grist : ' + found + '.');
+    }
     await loadColumns();
     for (const table of TABLES) {
       const raw = await grist.docApi.fetchTable(state.tableIds[table]);
@@ -140,7 +143,7 @@
       }
     }
     await applyCharter();
-    connection('Connecté à Grist');
+    connection('Connecté à Grist · sans pôle');
   }
 
   function validHex(value) { return /^#[\da-f]{6}$/i.test(String(value || '').trim()); }
