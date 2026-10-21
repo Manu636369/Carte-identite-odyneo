@@ -11,9 +11,9 @@
   // Les types Grist sont contrôlés au démarrage : le widget ne tente pas de
   // stocker une liste, une référence ou une pièce jointe dans une colonne Texte.
   const REQUIRED_TYPES = {
-    Association: {"Logo de l'association":'Attachments','Date de vérification':'Date'},
-    Etablissements: {'Public de l’établissement':'Choice',"Logo ou photo de l’établissement":'Attachments'},
-    Unites: {'Établissement de rattachement':'Ref:Etablissements','Type de service':'Choice','Public accueilli par l’unité':'ChoiceList',"Modalités d'accueil":'ChoiceList','Orientations / notifications (foyers uniquement)':'ChoiceList',"Photo ou logo de l'unité":'Attachments'}
+    Association: {"Nom de l'association":'Text',"Logo de l'association":'Attachments','Couleur principale (HEX)':'Text','Couleur secondaire (HEX)':'Text',"Couleur d'accent (HEX)":'Text','Police (facultative)':'Text','Référence de la charte':'Text','Date de vérification':'Date'},
+    Etablissements: {"Nom de l'établissement":'Text','Public de l’établissement':'Choice','Adresse administrative':'Text','E-mail administratif':'Text','Téléphone administratif':'Text',"Logo ou photo de l’établissement":'Attachments'},
+    Unites: {"Nom de l'unité / du service":'Text','Établissement de rattachement':'Ref:Etablissements','Type de service':'Choice','Précision du type (si autre)':'Text','Public accueilli par l’unité':'ChoiceList','Précisions sur le public':'Text',"Modalités d'accueil":'ChoiceList','Orientations / notifications (foyers uniquement)':'ChoiceList',"Photo ou logo de l'unité":'Attachments'}
   };
   const SERVICES = [
     'SAJ — Service d’accueil de jour', 'SAJ M — SAJ médicalisé', 'Foyer de vie (FV)',
@@ -147,9 +147,15 @@
     const missing = TABLES.filter(name => !state.tableIds[name]);
     if (missing.length) throw new Error('Tables absentes : ' + missing.join(', ') + '. Tables détectées : ' + (available.join(', ') || 'aucune') + '. Importe les trois onglets du classeur puis recharge le widget.');
     await loadColumns();
+    // Vérifier d’abord les libellés. Cela évite d’envoyer à Grist une demande
+    // de changement de type avec un identifiant de colonne inexistant.
+    for (const table of TABLES) {
+      for (const label of FIELDS[table]) {
+        if (!col(table,label)) throw new Error('Colonne introuvable dans « ' + table + ' » : « ' + label + ' ». Vérifie l’intitulé de la colonne dans Grist.');
+      }
+    }
     await configureEmptyAnyColumns();
     for (const table of TABLES) {
-      for (const label of FIELDS[table]) if (!col(table,label)) throw new Error('Colonne introuvable dans « ' + table + ' » : « ' + label + ' ». Vérifie l’intitulé de la colonne dans Grist.');
       for (const [label,expected] of Object.entries(REQUIRED_TYPES[table] || {})) {
         const actual=state.columnTypes[table]?.[norm(label)] || 'Any';
         const matches=typeMatches(actual,expected);
@@ -195,8 +201,15 @@
     const raw=await grist.docApi.fetchTable(state.tableIds[table]);
     return (raw.id||[]).map((id,i)=>{ const row={id:Number(id)}; for(const k of Object.keys(raw)) if(k!=='id') row[k]=raw[k]?.[i]; return row; });
   }
-  function normalizedValue(value) {
+  function normalizedValue(table,label,value) {
     const decoded=decode(value);
+    // Grist may return an empty ChoiceList as null, while the widget sends
+    // the explicit empty-list marker ['L']. They represent the same value.
+    if(state.columnTypes[table]?.[norm(label)]==='ChoiceList') {
+      if(decoded===null || decoded===undefined || decoded==='') return [];
+      const values=Array.isArray(decoded)?decoded:[decoded];
+      return values.map(v=>String(v).trim()).sort();
+    }
     if(Array.isArray(decoded)) return decoded.map(v=>String(v)).sort();
     if(decoded===null || decoded===undefined) return '';
     return String(decoded).trim();
@@ -207,7 +220,7 @@
     const failures=[];
     for(const [label,want] of Object.entries(values)) {
       const actual=get(table,found,label);
-      if(JSON.stringify(normalizedValue(actual))!==JSON.stringify(normalizedValue(want))) failures.push(label);
+      if(JSON.stringify(normalizedValue(table,label,actual))!==JSON.stringify(normalizedValue(table,label,want))) failures.push(label);
     }
     if(failures.length) throw new Error('Grist n’a pas confirmé ces champs : '+failures.join(', ')+'. Vérifie les types de colonnes et l’accès complet du widget.');
     return found;
