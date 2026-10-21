@@ -13,7 +13,7 @@
   const REQUIRED_TYPES = {
     Association: {"Logo de l'association":'Attachments','Date de vérification':'Date'},
     Etablissements: {'Public de l’établissement':'Choice',"Logo ou photo de l’établissement":'Attachments'},
-    Unites: {'Établissement de rattachement':'Ref','Type de service':'Choice','Public accueilli par l’unité':'ChoiceList',"Modalités d'accueil":'ChoiceList','Orientations / notifications (foyers uniquement)':'ChoiceList',"Photo ou logo de l'unité":'Attachments'}
+    Unites: {'Établissement de rattachement':'Ref:Etablissements','Type de service':'Choice','Public accueilli par l’unité':'ChoiceList',"Modalités d'accueil":'ChoiceList','Orientations / notifications (foyers uniquement)':'ChoiceList',"Photo ou logo de l'unité":'Attachments'}
   };
   const SERVICES = [
     'SAJ — Service d’accueil de jour', 'SAJ M — SAJ médicalisé', 'Foyer de vie (FV)',
@@ -36,7 +36,7 @@
   const $ = id => document.getElementById(id);
   const norm = value => String(value ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]/g,'');
   const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-  const state = {tableIds:{}, columns:{}, columnTypes:{}, data:{}, page:'home', establishmentId:null, formType:null, editingId:null, saving:false, saveTimer:null, saveQueued:false, search:''};
+  const state = {tableIds:{}, columns:{}, columnTypes:{}, columnMetaIds:{}, data:{}, page:'home', establishmentId:null, formType:null, editingId:null, saving:false, saveTimer:null, saveQueued:false, search:''};
   const rows = table => state.data[table] || [];
   const col = (table, label) => state.columns[table]?.[norm(label)] || null;
 
@@ -75,13 +75,64 @@
       const parent = tableRefById[state.tableIds[name]];
       state.columns[name] = {};
       state.columnTypes[name] = {};
+      state.columnMetaIds[name] = {};
       (columns.colId || []).forEach((id,i) => {
         if (Number(decode(columns.parentId?.[i])) === parent) {
           const label = columns.label?.[i];
-          if (label) { state.columns[name][norm(label)] = id; state.columnTypes[name][norm(label)] = String(columns.type?.[i] || 'Any'); }
+          if (label) { state.columns[name][norm(label)] = id; state.columnTypes[name][norm(label)] = String(columns.type?.[i] || 'Any'); state.columnMetaIds[name][norm(label)] = Number(columns.id?.[i]) || null; }
         }
       });
     }
+  }
+  function typeMatches(actual, expected) {
+    return expected==='Ref:Etablissements' ? actual==='Ref:Etablissements' : actual===expected;
+  }
+  function isBlankCell(value) {
+    const decoded=decode(value);
+    if(decoded===null || decoded===undefined) return true;
+    if(typeof decoded==='string') return decoded.trim()==='';
+    if(Array.isArray(decoded)) return decoded.length===0;
+    return false;
+  }
+  function choiceOptionsFor(table,label) {
+    if(table==='Etablissements' && label==='Public de l’établissement') return ESTABLISHMENT_PUBLICS;
+    if(table==='Unites' && label==='Type de service') return SERVICES;
+    if(table==='Unites' && label==='Public accueilli par l’unité') return UNIT_PUBLICS.map(x=>x.label);
+    if(table==='Unites' && label==="Modalités d'accueil") return MODALITIES;
+    if(table==='Unites' && label==='Orientations / notifications (foyers uniquement)') return ORIENTATIONS;
+    return null;
+  }
+  async function configureEmptyAnyColumns() {
+    const changes={};
+    for(const [table,requirements] of Object.entries(REQUIRED_TYPES)) {
+      for(const [label,expected] of Object.entries(requirements)) {
+        const actual=state.columnTypes[table]?.[norm(label)] || 'Any';
+        if(typeMatches(actual,expected)) continue;
+        if(actual!=='Any') continue;
+        const columnId=col(table,label);
+        const raw=await grist.docApi.fetchTable(state.tableIds[table]);
+        if((raw[columnId]||[]).some(value=>!isBlankCell(value))) {
+          throw new Error('La colonne « '+label+' » de « '+table+' » est de type Any et contient déjà des données. Pour éviter toute perte, convertis-la dans Grist avant de continuer.');
+        }
+        const fields={type:expected};
+        const options=choiceOptionsFor(table,label);
+        if(options) fields.widgetOptions=JSON.stringify({choices:options});
+        if(expected==='Ref:Etablissements') {
+          const visibleCol=state.columnMetaIds.Etablissements?.[norm("Nom de l'établissement")];
+          if(visibleCol) fields.visibleCol=visibleCol;
+        }
+        (changes[table] ||= []).push({id:columnId,fields});
+      }
+    }
+    const tables=Object.keys(changes);
+    if(!tables.length) return;
+    const token=await grist.docApi.getAccessToken({readOnly:false});
+    for(const table of tables) {
+      const url=token.baseUrl+'/tables/'+encodeURIComponent(state.tableIds[table])+'/columns?auth='+encodeURIComponent(token.token);
+      const response=await fetch(url,{method:'PATCH',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify({columns:changes[table]})});
+      if(!response.ok) throw new Error('Grist n’a pas pu configurer automatiquement les colonnes de « '+table+' » (HTTP '+response.status+'). Vérifie que la vue a l’accès complet au document.');
+    }
+    await loadColumns();
   }
   async function loadData() {
     setConnection('Lecture des tables…');
@@ -96,11 +147,12 @@
     const missing = TABLES.filter(name => !state.tableIds[name]);
     if (missing.length) throw new Error('Tables absentes : ' + missing.join(', ') + '. Tables détectées : ' + (available.join(', ') || 'aucune') + '. Importe les trois onglets du classeur puis recharge le widget.');
     await loadColumns();
+    await configureEmptyAnyColumns();
     for (const table of TABLES) {
       for (const label of FIELDS[table]) if (!col(table,label)) throw new Error('Colonne introuvable dans « ' + table + ' » : « ' + label + ' ». Vérifie l’intitulé de la colonne dans Grist.');
       for (const [label,expected] of Object.entries(REQUIRED_TYPES[table] || {})) {
         const actual=state.columnTypes[table]?.[norm(label)] || 'Any';
-        const matches=expected==='Ref' ? (actual==='Ref' || actual.startsWith('Ref:')) : actual===expected;
+        const matches=typeMatches(actual,expected);
         if(!matches) throw new Error('Type incorrect : dans la table « '+table+' », la colonne « '+label+' » est de type « '+actual+' », mais doit être de type Grist « '+expected+' ». Dans Grist, sélectionne la colonne, puis règle son type dans le panneau « Colonne ». Le classeur Excel ne peut pas définir ces types Grist à l’import.');
       }
       const raw = await grist.docApi.fetchTable(state.tableIds[table]);
